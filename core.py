@@ -54,6 +54,8 @@ class pattern():
         'Frequency': 'Hz',
         'Theta': 'deg',
         'Phi': 'deg',
+        'Elevation': 'deg',
+        'Azimuth': 'deg',
         'Re_Etheta': 'V/m',
         'Im_Etheta': 'V/m',
         'Re_Ephi': 'V/m',
@@ -92,6 +94,8 @@ class pattern():
     }
 
     DEFAULT_DIMS = ['field', 'frequency', 'theta', 'phi']
+    
+    SUPPORTED_FILE_TYPES = ['.ffs', '.ffe', '.nc', '.csv']
 
     def __init__(
             self,
@@ -467,7 +471,7 @@ class pattern():
     # TODO implement calc_phase_center
     def calc_phase_center(self):
         pass
-
+        
     def find_beamwidth(self, pattern_type, bw_setting, plane, **kwargs):
         """
         Computes some amplitude beamwidth (ex: -3 dB BW) of an antenna pattern in a specific plane. Computed at each frequency
@@ -627,7 +631,7 @@ class pattern():
         
         # store beamwidth results
         self.data_array.attrs[save_name] = np.array(bw_result)
-            
+              
     def sph_2_array_coordinates(self):
         """
         Covnerts a pattern object with coordinates (0 <= theta <= 180, 0 <= phi <= 360) to
@@ -655,14 +659,65 @@ class pattern():
 
         # concatenate xarrays of 0<=phi<=180 and formally 180<=phi<=360
         self.data_array = xr.concat([upper_data, self.data_array.loc[:, :, :, 0:180]], dim='theta')
+    
+    def sph_2_az_el(self):
+        """
+        Converts spherical coordinates to azimuth/elevation instead. Changes 
+        theta/phi coords to elevation/azimuth.
 
+        elevation = 90 - theta
+        azimuth = phi
+
+        """
+        self.data_array['theta'] = 90 - self.data_array['theta']
+        self.data_array = self.data_array.rename(
+            {'theta': 'elevation', 
+            'phi': 'azimuth'})
+             
 
 def _check_field_in_valid_fields(field_name):
     return field_name in pattern.VALID_FIELD_NAMES
 
-# TODO implement from_file
-def from_file(file_name):
-    pass
+
+def supported_file_types():
+    return pattern.SUPPORTED_FILE_TYPES
+
+
+def from_file(file_name, save=False):
+    """
+    Creates a pattern object from data found in a file. File must be in the format
+    of pattern.SUPPORTED_FILE_TYPES.
+
+    :param file_name: name of file to load
+    :type file_name: str
+
+    :param save: save pattern.data_array as netcdf (.nc) if True (default False)
+    :type save: bool
+
+    :return: pattern object, constructed from data in file
+    """
+    # grab extension
+    root, ext = splitext(file_name)
+
+    # warnings
+    if ext not in supported_file_types():
+        warnings.warn('File type not supported for parsing. Returning None.', UserWarning)
+    
+    # parse
+    pat = None
+    if ext == '.ffs':
+        pat = parse.from_ffs(file_name)
+    elif ext == '.ffe':
+        pat = parse.from_ffe(file_name)
+    elif ext == '.nc':
+        pat = parse.from_netcdf(file_name)
+
+    # save if requested
+    if save == True:
+        pat.data_array.to_netcdf(root + '.nc')
+
+    return pat
+    
 
 def read_csv(file_name, data_dict, coord_dict=pattern.DEFAULT_DIMS):
     """
@@ -736,3 +791,4 @@ def read_csv(file_name, data_dict, coord_dict=pattern.DEFAULT_DIMS):
     data_array = df.to_xarray()
 
     return pattern(data_array=data_array)
+    
