@@ -1,10 +1,12 @@
 import xarray as xr
 import pandas as pd
 import numpy as np
-import electromagnetics
-import math_funcs
-import copy
 import warnings
+import copy
+from antenna_toolbox import electromagnetics
+from antenna_toolbox import math_funcs
+
+
 
 
 class pattern():

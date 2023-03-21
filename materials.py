@@ -5,9 +5,8 @@ Contains materials characterization functions
 import numpy as np
 import skrf
 import pandas as pd
-import electromagnetics
 import scipy.optimize
-
+from antenna_toolbox import electromagnetics
 
 def nrw_method_complex_eps_mu(network_data, sample_length, lambda_cutoff=np.inf, **kwargs):
     """

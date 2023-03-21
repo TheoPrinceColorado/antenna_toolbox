@@ -1,11 +1,11 @@
 import numpy as np
 import scipy.integrate
 import pandas as pd
-import math_funcs
-import electromagnetics
-import core
 import warnings
 import xarray as xr
+from antenna_toolbox import math_funcs
+from antenna_toolbox import electromagnetics
+from antenna_toolbox import core
 
 
 def _read_in_file(file):

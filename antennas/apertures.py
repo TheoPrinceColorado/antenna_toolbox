@@ -3,8 +3,8 @@ Contains functions related to aperture antennas
 """
 
 import numpy as np
-import math_funcs
-import electromagnetics
+from antenna_toolbox import math_funcs
+from antenna_toolbox import electromagnetics
 
 
 def rectangular_aperture_fields(f, a, b, theta, phi, **kwargs):
