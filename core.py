@@ -3,8 +3,10 @@ import pandas as pd
 import numpy as np
 import warnings
 import copy
+from os.path import splitext
 from antenna_toolbox import electromagnetics
 from antenna_toolbox import math_funcs
+from antenna_toolbox import parse
 
 
 
@@ -349,7 +351,7 @@ class pattern():
         else:
             if coord == 'field':
                 raise ValueError("coord must be 'theta', 'phi', or 'frequency'.")
-        if extrema_type != 'max' or extrema_type != 'min':
+        if extrema_type is not 'max' or not 'min':
             raise ValueError("extrema_type is not in 'max' or 'min'.")
 
         # get coordinates that are NOT the coordinate to search for max/min along
