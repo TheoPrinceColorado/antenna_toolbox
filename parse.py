@@ -594,9 +594,10 @@ def from_ffs(file):
     return export_pattern
 
 
+# TODO update docstring with file format 
 def from_txt(file):
     """
-    Parses a .txt file.
+    Parse a .txt file.
 
     :param file: file to be parsed
     :return: pattern object with the data of that file

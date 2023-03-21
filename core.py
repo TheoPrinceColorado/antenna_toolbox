@@ -2,15 +2,17 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 import electromagnetics
-import parse
 import math_funcs
 import copy
 import warnings
-from os.path import splitext
 
 
 class pattern():
     VALID_FIELD_NAMES = [
+        'Etheta',
+        'Ephi',
+        'ERHCP',
+        'ELHCP',
         'Re_Etheta',
         'Im_Etheta',
         'Re_Ephi',
@@ -52,8 +54,6 @@ class pattern():
         'Frequency': 'Hz',
         'Theta': 'deg',
         'Phi': 'deg',
-        'Elevation': 'deg',
-        'Azimuth': 'deg',
         'Re_Etheta': 'V/m',
         'Im_Etheta': 'V/m',
         'Re_Ephi': 'V/m',
@@ -92,8 +92,6 @@ class pattern():
     }
 
     DEFAULT_DIMS = ['field', 'frequency', 'theta', 'phi']
-
-    SUPPORTED_FILE_TYPES = ['.ffs', '.ffe', '.nc', '.csv']
 
     def __init__(
             self,
@@ -209,7 +207,7 @@ class pattern():
                     raise ValueError('Fields passed as kwargs and fields in coords dimension')
             coords = kwarg_coords
 
-        if data is not None and coords is not None:
+        if not (data is None) and not (coords is None):
             if not type(coords) is dict:
                 raise ValueError("Pass coords as dict type. Type of coords was " + type(coords))
 
@@ -233,7 +231,7 @@ class pattern():
                 coords=coords,
                 dims=pattern.DEFAULT_DIMS
             )
-        elif data_array is not None:
+        elif not (data_array is None):
             self.data_array = data_array
 
             if not set(data_array.coords.keys()) == set(pattern.DEFAULT_DIMS):
@@ -249,7 +247,7 @@ class pattern():
                 raise ValueError('Fields in field dimension are not in pattern.VALID_FIELD_NAMES. ' + \
                                     'Invalid values marked False: ' + str(dict(zip(data_array.coords[pattern.DEFAULT_DIMS[0]], tf))))
 
-        elif data is not None or coords is not None:
+        elif not (data is None) or not (coords is None):
             raise ValueError("Both data and coords must be passed")
         else:
             self.data_array = xr.DataArray(
@@ -257,15 +255,39 @@ class pattern():
                 dims=pattern.DEFAULT_DIMS
             )
 
+    ## Magic methods section
 
     def __str__(self):
         return self.data_array.__str__()
 
-
     def __repr__(self):
         return self.data_array.__repr__()
 
+    def __add__(self, other):
+        """
+        Implements addition
+        """
+        return pattern(data_array=self.data_array + other.data_array)
 
+    def __sub__(self, other):
+        """
+        Implements subtract 
+        """
+        return pattern(data_array=self.data_array - other.data_array)
+
+    def __mul__(self, other):
+        """
+        Implements multiply
+        """
+        return pattern(data_array=self.data_array * other.data_array)
+
+    def __truediv__(self, other):
+        """
+        Implements division
+        """
+        return pattern(data_array=self.data_array / other.data_array) 
+    
+    # Implement of interlibrary interface functions
     def to_numpy(self):
         """Returns numpy array from internal data format
 
@@ -274,7 +296,7 @@ class pattern():
         """
         return self.data_array.values
 
-
+    # Implement pattern calculation functions
     def find_global_extrema(self, field, coord, extrema_type, **kwargs):
         """
         Finds the maximum of a data field for every coordinate. Saves data as a DataArray that is an attribute of
@@ -321,15 +343,11 @@ class pattern():
         else:
             if coord == 'field':
                 raise ValueError("coord must be 'theta', 'phi', or 'frequency'.")
-        if extrema_type is not 'max' or not 'min':
+        if extrema_type != 'max' or extrema_type != 'min':
             raise ValueError("extrema_type is not in 'max' or 'min'.")
 
         # get coordinates that are NOT the coordinate to search for max/min along
-        remaining_coords = None
-        if 'theta' in self.data_array.dims:
-            remaining_coords = ['frequency', 'theta', 'phi']
-        elif 'elevation' in self.data_array.dims:
-            remaining_coords = ['frequency', 'elevation', 'azimuth']
+        remaining_coords = ['frequency', 'theta', 'phi']
         remaining_coords.remove(coord)
 
         # find maximum or minimum vs coord
@@ -342,7 +360,6 @@ class pattern():
             arg = self.data_array.loc[field].argmin(remaining_coords)
         self.data_array.attrs[save_name + '_' + remaining_coords[0]] = self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy()
         self.data_array.attrs[save_name + '_' + remaining_coords[1]] = self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy()
-
 
     def calc_aperture_efficiency(self, pattern_type, area, **kwargs):
         """
@@ -447,13 +464,10 @@ class pattern():
         self.data_array.attrs['aperture_area'] = area                                               # store aperture area
         self.data_array.attrs['aperture_projected_area'] = projected_area                           # store projected area
 
-
     # TODO implement calc_phase_center
     def calc_phase_center(self):
         pass
 
-
-    # TODO I bet this could be made more efficient... kinda cowboy method'ed this
     def find_beamwidth(self, pattern_type, bw_setting, plane, **kwargs):
         """
         Computes some amplitude beamwidth (ex: -3 dB BW) of an antenna pattern in a specific plane. Computed at each frequency
@@ -613,11 +627,10 @@ class pattern():
         
         # store beamwidth results
         self.data_array.attrs[save_name] = np.array(bw_result)
-
-
+            
     def sph_2_array_coordinates(self):
         """
-        Converts a pattern object with coordinates (0 <= theta <= 180, 0 <= phi <= 360) to
+        Covnerts a pattern object with coordinates (0 <= theta <= 180, 0 <= phi <= 360) to
         (-180 <= theta <= 180, 0 <= phi <= 180).
 
         General algorithm for converting a single (theta, phi) point:
@@ -644,64 +657,12 @@ class pattern():
         self.data_array = xr.concat([upper_data, self.data_array.loc[:, :, :, 0:180]], dim='theta')
 
 
-    def sph_2_az_el(self):
-        """
-        Converts spherical coordinates to azimuth/elevation instead. Changes 
-        theta/phi coords to elevation/azimuth.
-
-        elevation = 90 - theta
-        azimuth = phi
-
-        """
-        self.data_array['theta'] = 90 - self.data_array['theta']
-        self.data_array = self.data_array.rename(
-            {'theta': 'elevation', 
-            'phi': 'azimuth'})
-
-
 def _check_field_in_valid_fields(field_name):
     return field_name in pattern.VALID_FIELD_NAMES
 
-
-def supported_file_types():
-    return pattern.SUPPORTED_FILE_TYPES
-
-
-def parse_file(file_name, save=False):
-    """
-    Creates a pattern object from data found in a file. File must be in the format
-    of pattern.SUPPORTED_FILE_TYPES.
-
-    :param file_name: name of file to load
-    :type file_name: str
-
-    :param save: save pattern.data_array as netcdf (.nc) if True (default False)
-    :type save: bool
-
-    :return: pattern object, constructed from data in file
-    """
-    # grab extension
-    root, ext = splitext(file_name)
-
-    # warnings
-    if ext not in supported_file_types():
-        warnings.warn('File type not supported for parsing. Returning None.', UserWarning)
-    
-    # parse
-    pat = None
-    if ext == '.ffs':
-        pat = parse.from_ffs(file_name)
-    elif ext == '.ffe':
-        pat = parse.from_ffe(file_name)
-    elif ext == '.nc':
-        pat = parse.from_netcdf(file_name)
-
-    # save if requested
-    if save == True:
-        pat.data_array.to_netcdf(root + '.nc')
-
-    return pat
-
+# TODO implement from_file
+def from_file(file_name):
+    pass
 
 def read_csv(file_name, data_dict, coord_dict=pattern.DEFAULT_DIMS):
     """
