@@ -8,9 +8,6 @@ from antenna_toolbox import electromagnetics
 from antenna_toolbox import math_funcs
 from antenna_toolbox import parse
 
-
-
-
 class pattern():
     VALID_FIELD_NAMES = [
         'Etheta',
@@ -303,6 +300,19 @@ class pattern():
         :rtype: numpy array
         """
         return self.data_array.values
+
+    def to_dataframe(self):
+        """Returns the pattern object as a multindex dataframe
+
+        :rtype: pandas DataFrame
+        """
+        return self._to_multindex_dataframe()
+
+    def _to_flat_dataframe(self):
+        return self._to_multindex_dataframe().reset_index()
+
+    def _to_multindex_dataframe(self):
+        return self.data_array.to_dataframe('value')
 
     # Implement pattern calculation functions
     def find_global_extrema(self, field, coord, extrema_type, **kwargs):
