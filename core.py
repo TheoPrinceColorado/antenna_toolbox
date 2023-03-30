@@ -307,11 +307,23 @@ class pattern():
         :type field_str_array: array of strings
         """
 
-        self.compute_ERHCP() if 'ERGHCP' in field_str_array else None
+        self.compute_ERHCP() if 'ERHCP' in field_str_array else None
         self.compute_ELHCP() if 'ELHCP' in field_str_array else None
         self.compute_Ephi() if 'Ephi' in field_str_array else None
         self.compute_Etheta() if 'Etheta' in field_str_array else None
+        
+        self.compute_EL3X_from_linear_E() if 'E3X' in field_str_array else None
+        self.compute_EL3Y_from_linear_E() if 'E3Y' in field_str_array else None
 
+        # I'm not 100% sure it makes sense to just use thesese functions automatically 
+        # since the success of these functions is predicated on other fields existing
+        # , but I can't think of a better way to do it
+        self.compute_Utheta_from_Etheta(self) if 'Utheta' in field_str_array else None
+        self.compute_Uphi_from_Ephi(self) if 'Uphi' in field_str_array else None
+        self.compute_URHCP_from_ERHCP(self) if 'URHCP' in field_str_array else None
+        self.compute_ULHCP_from_ELHCP(self) if 'ULHCP' in field_str_array else None
+        self.compute_UL3X_from_EL3X(self) if 'UL3X' in field_str_array else None
+        self.compute_UL3Y_from_EL3Y(self) if 'UL3Y' in field_str_array else None
 
     def _append_field(self, field, field_name):
         """
