@@ -318,12 +318,12 @@ class pattern():
         # I'm not 100% sure it makes sense to just use thesese functions automatically 
         # since the success of these functions is predicated on other fields existing
         # , but I can't think of a better way to do it
-        self.compute_Utheta_from_Etheta(self) if 'Utheta' in field_str_array else None
-        self.compute_Uphi_from_Ephi(self) if 'Uphi' in field_str_array else None
-        self.compute_URHCP_from_ERHCP(self) if 'URHCP' in field_str_array else None
-        self.compute_ULHCP_from_ELHCP(self) if 'ULHCP' in field_str_array else None
-        self.compute_UL3X_from_EL3X(self) if 'UL3X' in field_str_array else None
-        self.compute_UL3Y_from_EL3Y(self) if 'UL3Y' in field_str_array else None
+        self.compute_Utheta_from_Etheta() if 'Utheta' in field_str_array else None
+        self.compute_Uphi_from_Ephi() if 'Uphi' in field_str_array else None
+        self.compute_URHCP_from_ERHCP() if 'URHCP' in field_str_array else None
+        self.compute_ULHCP_from_ELHCP() if 'ULHCP' in field_str_array else None
+        self.compute_UL3X_from_EL3X() if 'UL3X' in field_str_array else None
+        self.compute_UL3Y_from_EL3Y() if 'UL3Y' in field_str_array else None
 
     def _append_field(self, field, field_name):
         """
