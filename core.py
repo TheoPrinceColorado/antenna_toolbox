@@ -7,9 +7,7 @@ from os.path import splitext
 from antenna_toolbox import electromagnetics
 from antenna_toolbox import math_funcs
 from antenna_toolbox import parse
-
-
-
+from antenna_toolbox import constants
 
 class pattern():
     VALID_FIELD_NAMES = [
@@ -17,14 +15,10 @@ class pattern():
         'Ephi',
         'ERHCP',
         'ELHCP',
-        'Re_Etheta',
-        'Im_Etheta',
-        'Re_Ephi',
-        'Im_Ephi',
-        'Re_Htheta',
-        'Im_Htheta',
-        'Re_Hphi',
-        'Im_Hphi',
+        'Utheta',
+        'Uphi',
+        'URHCP',
+        'ULHCP',
         'Directivity_Theta',
         'Directivity_Phi',
         'Directivity_Total',
@@ -305,6 +299,128 @@ class pattern():
         return self.data_array.values
 
     # Implement pattern calculation functions
+    def _append_field(self, field, field_name):
+        """
+        Appends a field to full data object after a compute is performed
+
+        :param field: a data array with a single unnamed field
+        :type field: xr.data_array
+        :param field_name: name of the field
+        :type field_name: str
+        """
+        field.coords['field'] = [field_name]
+        self.data_array = xr.concat( [self.data_array, field], dim='field')
+
+    def compute_ERHCP(self):
+        """
+        Computes the ERHCP in place from Ephi and Etheta
+        """
+        temp =  (1/np.sqrt(2)) * (self.data_array.loc[dict(field='Ephi')] \
+            - 1j * self.data_array.loc[dict(field='Etheta')])
+        self._append_field(temp, 'ERHCP')
+
+    def compute_ELHCP(self):
+        """
+        Computes the ELHCP in place from Ephi and Etheta
+        """
+        temp =  (1/np.sqrt(2)) * (self.data_array.loc[dict(field='Ephi')] \
+            + 1j * self.data_array.loc[dict(field='Etheta')])
+        self._append_field(temp, 'ELHCP')
+
+    def compute_Etheta(self):
+        """
+        Computes Etheta in place from ERHCP and ELHCP
+        """
+        temp =  (1j * np.sqrt(2) / 2) * (self.data_array.loc[dict(field='ERHCP')] \
+            - self.data_array.loc[dict(field='ELHCP')])
+        self._append_field(temp, 'Etheta')
+
+    def compute_Ephi(self):
+        """
+        Computes Ephi in place from ERHCP and ELHCP
+        """
+        temp =  (np.sqrt(2) / 2) * (self.data_array.loc[dict(field='ERHCP')] \
+            + self.data_array.loc[dict(field='ELHCP')])
+        self._append_field(temp, 'Ephi')
+
+    def compute_EL3X_from_linear_E(self):
+        """
+        Computes L3X fields in place based on Ludwig's 3rd definition [1]
+
+        Sources:
+        [1] A. C. Ludwig, “The Definition of Cross Polarization,” IEEE Trans. Antennas Propag., vol. 21, no. 1, pp. 116–119,
+        1973, doi: 10.1109/TAP.1973.1140406.
+        """
+        temp =  self.data_array.loc[dict(field='Etheta')] * np.cos(np.deg2rad(self.data_array.coords['phi'])) \
+            - self.data_array.loc[dict(field='Ephi')] * np.sin(np.deg2rad(self.data_array.coords['phi']))
+        self._append_field(temp, 'EL3X')
+
+    def compute_EL3Y_from_linear_E(self):
+        """
+        Computes L3Y fields in place based on Ludwig's 3rd definition [1]
+
+        Sources:
+        [1] A. C. Ludwig, “The Definition of Cross Polarization,” IEEE Trans. Antennas Propag., vol. 21, no. 1, pp. 116–119,
+        1973, doi: 10.1109/TAP.1973.1140406.
+        """
+        temp =  self.data_array.loc[dict(field='Etheta')] * np.sin(np.deg2rad(self.data_array.coords['phi'])) \
+            + self.data_array.loc[dict(field='Ephi')] * np.cos(np.deg2rad(self.data_array.coords['phi']))
+        self._append_field(temp, 'EL3Y')
+
+    def _compute_U_from_E(self, u_field_name, e_field_name):
+        """
+        Computes U (power) from an E field measurement
+
+        :param u_field_name: _description_
+        :type u_field_name: xr.data_array
+        :param e_field_name: _description_
+        :type e_field_name: xr.data_array
+        """
+        temp =  (1 / (2 * constants.Z_0)) \
+            * (np.abs(self.data_array.loc[dict(field=e_field_name)])**2)
+        self._append_field(temp, u_field_name)
+
+    def compute_Utheta_from_Etheta(self):
+        """
+        Computes Utheta in place from Etheta
+        """
+        self._compute_U_from_E('Utheta', 'Etheta')
+
+    def compute_Uphi_from_Ephi(self):
+        """
+        Computes Uphi in place from Ephi
+        """
+        self._compute_U_from_E('Uphi', 'Ephi')
+
+    def compute_URHCP_from_ERHCP(self):
+        """
+        Computes URHCP in place from ERHCP
+        """
+        self._compute_U_from_E('URHCP', 'ERHCP')
+
+    def compute_ULHCP_from_ELHCP(self):
+        """
+        Computes ULHCP in place from ELHCP
+        """
+        self._compute_U_from_E('ULHCP', 'ELHCP')
+
+    def compute_UL3X_from_EL3X(self):
+        """
+        Computes UL3X in place from EL3X
+        """
+        self._compute_U_from_E('UL3X', 'EL3X')
+
+    def compute_UL3Y_from_EL3Y(self):
+        """
+        Computes UL3X in place from EL3X
+        """
+        self._compute_U_from_E('UL3Y', 'EL3Y')
+
+    #TODO compute polarization_angle
+    #TODO compute axial ratio
+    #TODO compute Xpol ratios
+    #TODO directivity from pattern integration
+
     def find_global_extrema(self, field, coord, extrema_type, **kwargs):
         """
         Finds the maximum of a data field for every coordinate. Saves data as a DataArray that is an attribute of
