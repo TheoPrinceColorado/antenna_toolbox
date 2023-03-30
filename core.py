@@ -299,6 +299,20 @@ class pattern():
         return self.data_array.values
 
     # Implement pattern calculation functions
+    def request_field(self, field_str_array):
+        """
+        Attempts to compute all of the fields listed in the field_str_array in place
+
+        :param field_str_array: valid field names that the user would like to compute
+        :type field_str_array: array of strings
+        """
+
+        self.compute_ERHCP() if 'ERGHCP' in field_str_array else None
+        self.compute_ELHCP() if 'ELHCP' in field_str_array else None
+        self.compute_Ephi() if 'Ephi' in field_str_array else None
+        self.compute_Etheta() if 'Etheta' in field_str_array else None
+
+
     def _append_field(self, field, field_name):
         """
         Appends a field to full data object after a compute is performed
