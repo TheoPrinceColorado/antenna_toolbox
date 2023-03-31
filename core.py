@@ -321,7 +321,7 @@ class pattern():
         """
         field.coords['field'] = [field_name]
         self.data_array = xr.concat( [self.data_array, field], dim='field')
-    
+
     # TODO change get and set item to use a common meta indexer instead of copies of the same code
     def __getitem__(self, key):
         """
@@ -331,7 +331,7 @@ class pattern():
         if isinstance(key, str):
             field = [key]
             return pattern(data_array=self.data_array.loc[dict(field=field)])
-        if isinstance(key, slice):
+        elif isinstance(key, slice):
             field = key
             return pattern(data_array=self.data_array.loc[dict(field=field)])
         elif not isinstance(key, list) and not isinstance(key, tuple):
@@ -389,12 +389,11 @@ class pattern():
         """
         Implement assignment indexing
         """
-
         # Consider checking np.char.isnumeric(frequency) and for theta and phi
         if isinstance(key, str):
             field = [key]
             self.data_array.loc[dict(field=field)] = value.data_array
-        if isinstance(key, slice):
+        elif isinstance(key, slice):
             field = key
             self.data_array.loc[dict(field=field)] = value.data_array
         elif not isinstance(key, list) and not isinstance(key, tuple):
