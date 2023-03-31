@@ -748,3 +748,75 @@ def from_netcdf(file):
     dr.close()
     return export_pattern
     
+def read_csv(file_name, data_dict, coord_dict=['field', 'frequency', 'theta', 'phi']):
+    """
+    Reads in a CSV file and returns a pattern object. The implementation uses the pandas read_csv. 
+    One needs to rename the columns in the csv file to match either a default coordinate name or a field name.
+    The renaming can be done at runtime by using the data_dict and coord_dict dictionaries to rename the columns. ::
+
+    #TODO Implement coord dict so that if and pattern.DEFAULT_DIMS is not specified, an empty column is added ::
+
+    :param file_name: Name of the file to load
+    :type file_name: str
+
+    :param data_dict: Dictionary mapping column names in the file (keys) to field names (values)
+    :type data_dict: dict
+
+    :param coord_dict: Dictionary mapping column names in the file (keys) to coordinate names, defaults to pattern.DEFAULT_DIMS
+    :type coord_dict: dict, optional
+
+    :return: Pattern object
+    :rtype: pattern
+
+    Usage:
+        import pandas as pd::
+        df = pd.read_csv(file_name)::
+
+        df::
+        	d [mm]	Freq [GHz]	Phi [deg]	Theta [deg]	dB(DirLHCP) []	dB(DirRHCP) []::
+        0	0.508	0.425	-180	0	-29.980465	7.353579::
+        1	0.508	0.425	-180	1	-29.381891	7.353245::
+        2	0.508	0.425	-180	2	-28.727721	7.347768::
+        3	0.508	0.425	-180	3	-28.037381	7.337168::
+        4	0.508	0.425	-180	4	-27.326933	7.321464::
+        ...	...	...	...	...	...	...::
+        356	0.508	0.425	-180	356	-31.402653	7.303198::
+        357	0.508	0.425	-180	357	-31.228061	7.323577::
+        358	0.508	0.425	-180	358	-30.923778	7.338759::
+        359	0.508	0.425	-180	359	-30.501703	7.348756::
+        360	0.508	0.425	-180	360	-29.980465	7.353579::
+
+        coord_dict = {'Freq [GHz]':'frequency', 'Phi [deg]': 'phi', 'Theta [deg]':'theta',}::
+        data_dict = {'dB(DirLHCP) []':'Directivity_LHCP', 'dB(DirRHCP) []':'Directivity_RHCP'}::
+
+        antenna_toolbox.from_csv(file_name, data_dict, coord_dict)
+
+        <xarray.Dataset>::
+        Dimensions:    (field: 2, frequency: 1, phi: 1, theta: 361)::
+        Coordinates::
+        * field      (field) object 'Directivity_LHCP' 'Directivity_RHCP'::
+        * frequency  (frequency) float64 0.425::
+        * phi        (phi) int64 -180::
+        * theta      (theta) int64 0 1 2 3 4 5 6 7 ... 353 354 355 356 357 358 359 360::
+        Data variables:::
+            value      (field, frequency, phi, theta) float64 -29.98 -29.38 ... 7.354::
+    """
+    df = pd.read_csv(file_name)
+
+    df = df.rename(coord_dict, axis='columns')
+
+    df = df.rename(data_dict, axis='columns')
+    
+    field_names = data_dict.keys()
+
+    field_names = list(data_dict.values())
+    other_coord_names = list(coord_dict.values())
+
+    df = df[field_names + other_coord_names].copy()
+    df = df.melt(id_vars=other_coord_names, value_vars=field_names, var_name='field')
+
+    df = df.set_index(['field'] + other_coord_names)
+
+    data_array = df.to_xarray()
+
+    return core.pattern(data_array=data_array)

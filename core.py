@@ -9,6 +9,15 @@ from antenna_toolbox import math_funcs
 from antenna_toolbox import parse
 from antenna_toolbox import constants
 
+def _get_keys_whose_values_contain_string(dictionary, search_string):
+    found_keys = []
+    for k in dictionary.keys():
+        found_keys.append(k) if search_string in dictionary[k] else None
+    return found_keys
+
+def _remove_all_list_elements_in_l2_from_l1(l1, l2):
+    return [x for x in l1 if x not in l2]
+
 class pattern():
     VALID_FIELD_NAMES = [
         'Etheta',
@@ -91,9 +100,26 @@ class pattern():
         'Polarization_Angle': 'deg'
     }
 
+    FIELDS_WITH_UNITS_DB =  _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'dB')
+
+    REAL_UNITS = ['V/m', 'A/m']
+    FIELD_WITH_REAL_UNITS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'V/m') \
+        + _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'A/m')
+
+    FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV = FIELD_WITH_REAL_UNITS
+    FIELDS_UNSAFE_FOR_ADD_SUB_MUL_DIV = _remove_all_list_elements_in_l2_from_l1(DEFAULT_UNITS, FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV)
+
     DEFAULT_DIMS = ['field', 'frequency', 'theta', 'phi']
-    
+
     SUPPORTED_FILE_TYPES = ['.ffs', '.ffe', '.nc', '.csv']
+
+    def _get_coords_as_list(self, coord):
+        return list(self.data_array.coords[coord].values)
+
+    def _are_fields_safe_to_add_sub_mul_div(self):
+        if any(x in self._get_coords_as_list('field') for x in self.FIELDS_UNSAFE_FOR_ADD_SUB_MUL_DIV):
+            raise KeyError('Fields unsafe to apply add, subtract, multiply or divide. Try slicing fields to include only ' \
+                + str(self.FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV))
 
     def __init__(
             self,
@@ -265,30 +291,225 @@ class pattern():
     def __repr__(self):
         return self.data_array.__repr__()
 
+    def concat(self, other, dim):
+        """
+        Concatenates other to the pattern object along the dimension specified 
+        and returns a new pattern object
+
+        :param other: pattern object to concatenate
+        :type other: pattern
+        :param dim: valid field name to concatenate
+        :type dim: str
+
+        :return: 
+        :rtype: _type_
+        """
+        return pattern(data_array=xr.concat([self.data_array, other.data_array], dim=dim))
+
+    def _do_pattern_objects_contain_the_same_fields(self, other):
+        if not all(item in self._get_coords_as_list('field') for item in other._get_coords_as_list('field')):
+            raise KeyError('Fields of objects must be aligned. Try slicing along fields and then retry the operation.')
+
+    def _are_patterns_safe_to_add_sub_mul_div(self, other):
+        self._are_fields_safe_to_add_sub_mul_div()
+        other._are_fields_safe_to_add_sub_mul_div()
+        # self._do_pattern_objects_contain_the_same_fields(other)
+
+    def is_empty(self):
+        return self.data_array.size == 0
+
     def __add__(self, other):
         """
         Implements addition
         """
-        return pattern(data_array=self.data_array + other.data_array)
+        if np.isscalar(other):
+            return pattern(data_array=self.data_array + other)
+        elif isinstance(other, pattern):
+            self._are_patterns_safe_to_add_sub_mul_div(other)
+            p = pattern(data_array=self.data_array + other.data_array)
+            if p.is_empty():
+                raise Warning('Resulting pattern is empty, did you mean to use pattern.concat(other_pattern)?')
+            return p
+        else:
+            raise ValueError('Can only add pattern objects and scalars')
 
     def __sub__(self, other):
         """
         Implements subtract 
         """
-        return pattern(data_array=self.data_array - other.data_array)
+        if np.isscalar(other):
+            return pattern(data_array=self.data_array - other)
+        elif isinstance(other, pattern):
+            self._are_patterns_safe_to_add_sub_mul_div(other)
+            p = pattern(data_array=self.data_array - other.data_array)
+            if p.is_empty():
+                raise Warning('Resulting pattern is empty')
+            return p
+        else:
+            raise ValueError('Can only add pattern objects and scalars')
 
     def __mul__(self, other):
         """
         Implements multiply
         """
-        return pattern(data_array=self.data_array * other.data_array)
+        if np.isscalar(other):
+            return pattern(data_array=self.data_array * other)
+        elif isinstance(other, pattern):
+            self._are_patterns_safe_to_add_sub_mul_div(other)
+            p = pattern(data_array=self.data_array * other.data_array)
+            if p.is_empty():
+                raise Warning('Resulting pattern is empty')
+            return p
+        else:
+            raise ValueError('Can only add pattern objects and scalars')
 
     def __truediv__(self, other):
         """
         Implements division
         """
-        return pattern(data_array=self.data_array / other.data_array) 
-    
+        if np.isscalar(other):
+            return pattern(data_array=self.data_array / other)
+        elif isinstance(other, pattern):
+            self._are_patterns_safe_to_add_sub_mul_div(other)
+            p = pattern(data_array=self.data_array / other.data_array)
+            if p.is_empty():
+                raise Warning('Resulting pattern is empty')
+            return p
+        else:
+            raise ValueError('Can only add pattern objects and scalars')
+
+    def _append_field(self, field, field_name):
+        """
+        Appends a field to full data object after a compute is performed
+
+        :param field: a data array with a single unnamed field
+        :type field: xr.data_array
+        :param field_name: name of the field
+        :type field_name: str
+        """
+        field.coords['field'] = [field_name]
+        self.data_array = xr.concat( [self.data_array, field], dim='field')
+
+    def __getitem__(self, key):
+        """
+        Implement indexing
+        """
+        if isinstance(key, str):
+            field = [key]
+            return pattern(data_array=self.data_array.loc[dict(field=field)])
+        elif isinstance(key, slice):
+            field = key
+            return pattern(data_array=self.data_array.loc[dict(field=field)])
+        elif not isinstance(key, list) and not isinstance(key, tuple):
+            raise KeyError('Passed indexer is not a field name string, list, tuple or slice')
+        elif len(key) == 1:
+            field = key
+            return pattern(data_array=self.data_array.loc[dict(field=field)])
+        elif len(key) == 2:
+            field, frequency = key
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            return pattern(data_array=self.data_array.loc[dict(field=field, frequency=frequency)])
+        elif len(key) == 3:
+            field, frequency, theta = key
+
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            if not isinstance(theta, list) and not isinstance(theta, slice):
+                theta = [theta]
+
+            return pattern(data_array=self.data_array.loc[dict(field=field, frequency=frequency, theta=theta)])
+        elif len(key) == 4:
+            field, frequency, theta, phi = key
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            if not isinstance(theta, list) and not isinstance(theta, slice):
+                theta = [theta]
+
+            if not isinstance(phi, list) and not isinstance(phi, slice):
+                phi = [phi]
+            return pattern(data_array=self.data_array.loc[dict(field=field, frequency=frequency, theta=theta, phi=phi)])
+        else:
+            raise KeyError('Invalid indexing')
+        
+    def __setitem__(self, key, value):
+        """
+        Implement assignment indexing
+        """
+        if isinstance(key, str):
+            field = [key]
+            self.data_array.loc[dict(field=field)] = value.data_array
+        elif isinstance(key, slice):
+            field = key
+            self.data_array.loc[dict(field=field)] = value.data_array
+        elif not isinstance(key, list) and not isinstance(key, tuple):
+            raise KeyError('Passed indexer is not a field name string, list, tuple or slice')
+        elif len(key) == 1:
+            field = key
+            self.data_array.loc[dict(field=field)] = value.data_array
+        elif len(key) == 2:
+            field, frequency = key
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            self.data_array.loc[dict(field=field, frequency=frequency)] = value.data_array
+        elif len(key) == 3:
+            field, frequency, theta = key
+
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            if not isinstance(theta, list) and not isinstance(theta, slice):
+                theta = [theta]
+
+            self.data_array.loc[dict(field=field, frequency=frequency, theta=theta)] = value.data_array
+        elif len(key) == 4:
+            field, frequency, theta, phi = key
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            if not isinstance(theta, list) and not isinstance(theta, slice):
+                theta = [theta]
+
+            if not isinstance(phi, list) and not isinstance(phi, slice):
+                phi = [phi]
+            self.data_array.loc[dict(field=field, frequency=frequency, theta=theta, phi=phi)] = value.data_array
+        else:
+            raise KeyError('Invalid indexing')
+            
     # Implement of interlibrary interface functions
     def to_numpy(self):
         """Returns numpy array from internal data format
@@ -297,6 +518,19 @@ class pattern():
         :rtype: numpy array
         """
         return self.data_array.values
+
+    def to_dataframe(self):
+        """Returns the pattern object as a multindex dataframe
+
+        :rtype: pandas DataFrame
+        """
+        return self._to_multindex_dataframe()
+
+    def _to_flat_dataframe(self):
+        return self._to_multindex_dataframe().reset_index()
+
+    def _to_multindex_dataframe(self):
+        return self.data_array.to_dataframe('value')
 
     # Implement pattern calculation functions
     def request_field(self, field_str_array):
@@ -493,7 +727,7 @@ class pattern():
         else:
             if coord == 'field':
                 raise ValueError("coord must be 'theta', 'phi', or 'frequency'.")
-        if extrema_type is not 'max' or not 'min':
+        if extrema_type != 'max' or extrema_type != 'min':
             raise ValueError("extrema_type is not in 'max' or 'min'.")
 
         # get coordinates that are NOT the coordinate to search for max/min along
@@ -863,78 +1097,4 @@ def from_file(file_name, save=False):
         pat.data_array.to_netcdf(root + '.nc')
 
     return pat
-    
-
-def read_csv(file_name, data_dict, coord_dict=pattern.DEFAULT_DIMS):
-    """
-    Reads in a CSV file and returns a pattern object. The implementation uses the pandas read_csv. 
-    One needs to rename the columns in the csv file to match either a default coordinate name or a field name.
-    The renaming can be done at runtime by using the data_dict and coord_dict dictionaries to rename the columns. ::
-
-    #TODO Implement coord dict so that if and pattern.DEFAULT_DIMS is not specified, an empty column is added ::
-
-    :param file_name: Name of the file to load
-    :type file_name: str
-
-    :param data_dict: Dictionary mapping column names in the file (keys) to field names (values)
-    :type data_dict: dict
-
-    :param coord_dict: Dictionary mapping column names in the file (keys) to coordinate names, defaults to pattern.DEFAULT_DIMS
-    :type coord_dict: dict, optional
-
-    :return: Pattern object
-    :rtype: pattern
-
-    Usage:
-        import pandas as pd::
-        df = pd.read_csv(file_name)::
-
-        df::
-        	d [mm]	Freq [GHz]	Phi [deg]	Theta [deg]	dB(DirLHCP) []	dB(DirRHCP) []::
-        0	0.508	0.425	-180	0	-29.980465	7.353579::
-        1	0.508	0.425	-180	1	-29.381891	7.353245::
-        2	0.508	0.425	-180	2	-28.727721	7.347768::
-        3	0.508	0.425	-180	3	-28.037381	7.337168::
-        4	0.508	0.425	-180	4	-27.326933	7.321464::
-        ...	...	...	...	...	...	...::
-        356	0.508	0.425	-180	356	-31.402653	7.303198::
-        357	0.508	0.425	-180	357	-31.228061	7.323577::
-        358	0.508	0.425	-180	358	-30.923778	7.338759::
-        359	0.508	0.425	-180	359	-30.501703	7.348756::
-        360	0.508	0.425	-180	360	-29.980465	7.353579::
-
-        coord_dict = {'Freq [GHz]':'frequency', 'Phi [deg]': 'phi', 'Theta [deg]':'theta',}::
-        data_dict = {'dB(DirLHCP) []':'Directivity_LHCP', 'dB(DirRHCP) []':'Directivity_RHCP'}::
-
-        antenna_toolbox.from_csv(file_name, data_dict, coord_dict)
-
-        <xarray.Dataset>::
-        Dimensions:    (field: 2, frequency: 1, phi: 1, theta: 361)::
-        Coordinates::
-        * field      (field) object 'Directivity_LHCP' 'Directivity_RHCP'::
-        * frequency  (frequency) float64 0.425::
-        * phi        (phi) int64 -180::
-        * theta      (theta) int64 0 1 2 3 4 5 6 7 ... 353 354 355 356 357 358 359 360::
-        Data variables:::
-            value      (field, frequency, phi, theta) float64 -29.98 -29.38 ... 7.354::
-    """
-    df = pd.read_csv(file_name)
-
-    df = df.rename(coord_dict, axis='columns')
-
-    df = df.rename(data_dict, axis='columns')
-    
-    field_names = data_dict.keys()
-
-    field_names = list(data_dict.values())
-    other_coord_names = list(coord_dict.values())
-
-    df = df[field_names + other_coord_names].copy()
-    df = df.melt(id_vars=other_coord_names, value_vars=field_names, var_name='field')
-
-    df = df.set_index(['field'] + other_coord_names)
-
-    data_array = df.to_xarray()
-
-    return pattern(data_array=data_array)
     
