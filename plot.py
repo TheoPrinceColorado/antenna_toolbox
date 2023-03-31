@@ -44,8 +44,6 @@ def polar_phi_cut(pattern_object, field_names, frequency, phi, field_labels=None
     
     data_array = pattern_object.data_array
 
-    fig = plt.figure()
-
     ax = plt.subplot(111, polar=True)
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1) # increasing theta clockwise
@@ -86,8 +84,6 @@ def polar_theta_cut(pattern_object, field_names, frequency, theta, field_labels=
     
     data_array = pattern_object.data_array
 
-    fig = plt.figure()
-
     ax = plt.subplot(111, polar=True)
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1) # increasing theta clockwise
@@ -106,4 +102,79 @@ def polar_theta_cut(pattern_object, field_names, frequency, theta, field_labels=
     ax.legend(loc="lower left", frameon=False,
             bbox_to_anchor=(.5 + np.cos(angle)/2, .5 + np.sin(angle)/2))
 
+    plt.tight_layout()
+
+def rect_phi_cut(pattern_object, field_names, frequency, phi, field_labels=None):
+    """Plot rectangular phi cut
+
+    :param pattern_object: _description_
+    :type pattern_object: _type_
+    :param field_names: _description_
+    :type field_names: _type_
+    :param frequency: _description_
+    :type frequency: _type_
+    :param phi: _description_
+    :type phi: _type_
+    :param field_labels: _description_, defaults to None
+    :type field_labels: _type_, optional
+    """
+    data_array = pattern_object.data_array
+
+    ax = plt.subplot(111)
+
+    units = set()
+    for i, field in enumerate(field_names):
+        data_array_cut = data_array.sel(field=field, frequency=frequency, phi=phi)
+        theta = data_array_cut.coords['theta'].values
+        data =  data_array_cut.value
+
+        if field_labels is None:
+            plt.plot(theta, data, label=field)
+        else:
+            plt.plot(theta, data, label=field_labels[i])
+        
+        units.add(pattern_object.DEFAULT_UNITS[field])
+
+    if len(units) == 1:
+        plt.ylabel(list(units)[0])
+    plt.xlabel(pattern_object.DEFAULT_UNITS['Theta'])
+    plt.legend()
+    plt.tight_layout()
+
+
+def rect_theta_cut(pattern_object, field_names, frequency, theta, field_labels=None):
+    """Plot rectangular theta cut
+
+    :param pattern_object: _description_
+    :type pattern_object: _type_
+    :param field_names: _description_
+    :type field_names: _type_
+    :param frequency: _description_
+    :type frequency: _type_
+    :param theta: _description_
+    :type theta: _type_
+    :param field_labels: _description_, defaults to None
+    :type field_labels: _type_, optional
+    """
+    data_array = pattern_object.data_array
+
+    ax = plt.subplot(111)
+
+    units = set()
+    for i, field in enumerate(field_names):
+        data_array_cut = data_array.sel(field=field, frequency=frequency, theta=theta)
+        phi = data_array_cut.coords['phi'].values*np.pi/180.0
+        data =  data_array_cut.value
+
+        if field_labels is None:
+            plt.plot(phi, data, label=field)
+        else:
+            plt.plot(phi, data, label=field_labels[i])
+        
+        units.add(pattern_object.DEFAULT_UNITS[field])
+
+    if len(units) == 1:
+        plt.ylabel(list(units)[0])
+    plt.xlabel(pattern_object.DEFAULT_UNITS['Theta'])
+    plt.legend()
     plt.tight_layout()
