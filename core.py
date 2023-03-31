@@ -8,6 +8,12 @@ from antenna_toolbox import electromagnetics
 from antenna_toolbox import math_funcs
 from antenna_toolbox import parse
 
+def _get_keys_whose_values_contain_string(dictionary, search_string):
+    found_keys = []
+    for k in dictionary.keys():
+        found_keys.append(k) if search_string in dictionary[k] else None
+    return found_keys
+
 class pattern():
     VALID_FIELD_NAMES = [
         'Etheta',
@@ -95,7 +101,14 @@ class pattern():
     }
 
     DEFAULT_DIMS = ['field', 'frequency', 'theta', 'phi']
-    
+
+    FIELDS_WITH_UNITS_DB =  _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'dB')
+
+    REAL_UNITS = ['V/m', 'A/m', 'W']
+    FIELD_WITH_REAL_UNITS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'V/m') \
+        + _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'A/m') \
+            + _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'W')
+
     SUPPORTED_FILE_TYPES = ['.ffs', '.ffe', '.nc', '.csv']
 
     def __init__(
@@ -272,6 +285,9 @@ class pattern():
         """
         Implements addition
         """
+        # TODO implement add dBs as either real units or just normal add
+        # TODO if adding two patterns together that have different fields, should produce only the aligned fields
+        # TODO drop or recalculate elements that are not safe for add subtract
         return pattern(data_array=self.data_array + other.data_array)
 
     def __sub__(self, other):
@@ -284,6 +300,8 @@ class pattern():
         """
         Implements multiply
         """
+        # TODO implement adding dB together only
+        # TODO drop or recalculate elements that are not safe for multiply divide
         return pattern(data_array=self.data_array * other.data_array)
 
     def __truediv__(self, other):
@@ -291,7 +309,144 @@ class pattern():
         Implements division
         """
         return pattern(data_array=self.data_array / other.data_array) 
+
+    def _append_field(self, field, field_name):
+        """
+        Appends a field to full data object after a compute is performed
+
+        :param field: a data array with a single unnamed field
+        :type field: xr.data_array
+        :param field_name: name of the field
+        :type field_name: str
+        """
+        field.coords['field'] = [field_name]
+        self.data_array = xr.concat( [self.data_array, field], dim='field')
     
+    # TODO change get and set item to use a common meta indexer instead of copies of the same code
+    def __getitem__(self, key):
+        """
+        Implement indexing
+        """
+        # Consider checking np.char.isnumeric(frequency) and for theta and phi
+        if isinstance(key, str):
+            field = [key]
+            return pattern(data_array=self.data_array.loc[dict(field=field)])
+        if isinstance(key, slice):
+            field = key
+            return pattern(data_array=self.data_array.loc[dict(field=field)])
+        elif not isinstance(key, list) and not isinstance(key, tuple):
+            raise KeyError('Passed indexer is not a field name string, list, tuple or slice')
+        elif len(key) == 1:
+            field = key
+            return pattern(data_array=self.data_array.loc[dict(field=field)])
+        elif len(key) == 2:
+            field, frequency = key
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            return pattern(data_array=self.data_array.loc[dict(field=field, frequency=frequency)])
+        elif len(key) == 3:
+            field, frequency, theta = key
+
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            if not isinstance(theta, list) and not isinstance(theta, slice):
+                theta = [theta]
+
+            return pattern(data_array=self.data_array.loc[dict(field=field, frequency=frequency, theta=theta)])
+        elif len(key) == 4:
+            field, frequency, theta, phi = key
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            if not isinstance(theta, list) and not isinstance(theta, slice):
+                theta = [theta]
+
+            if not isinstance(phi, list) and not isinstance(phi, slice):
+                phi = [phi]
+            return pattern(data_array=self.data_array.loc[dict(field=field, frequency=frequency, theta=theta, phi=phi)])
+        else:
+            raise KeyError('Invalid indexing')
+        
+
+    def __setitem__(self, key, value):
+        """
+        Implement assignment indexing
+        """
+
+        # Consider checking np.char.isnumeric(frequency) and for theta and phi
+        if isinstance(key, str):
+            field = [key]
+            self.data_array.loc[dict(field=field)] = value.data_array
+        if isinstance(key, slice):
+            field = key
+            self.data_array.loc[dict(field=field)] = value.data_array
+        elif not isinstance(key, list) and not isinstance(key, tuple):
+            raise KeyError('Passed indexer is not a field name string, list, tuple or slice')
+        elif len(key) == 1:
+            field = key
+            self.data_array.loc[dict(field=field)] = value.data_array
+        elif len(key) == 2:
+            field, frequency = key
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            self.data_array.loc[dict(field=field, frequency=frequency)] = value.data_array
+        elif len(key) == 3:
+            field, frequency, theta = key
+
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            if not isinstance(theta, list) and not isinstance(theta, slice):
+                theta = [theta]
+
+            self.data_array.loc[dict(field=field, frequency=frequency, theta=theta)] = value.data_array
+        elif len(key) == 4:
+            field, frequency, theta, phi = key
+            if isinstance(field, str):
+                field = [field]
+            elif not isinstance(field, list) and not isinstance(field, slice):
+                raise KeyError('Passed field is not a string, slice or list')
+            
+            if not isinstance(frequency, list) and not isinstance(frequency, slice):
+                frequency = [frequency]
+
+            if not isinstance(theta, list) and not isinstance(theta, slice):
+                theta = [theta]
+
+            if not isinstance(phi, list) and not isinstance(phi, slice):
+                phi = [phi]
+            self.data_array.loc[dict(field=field, frequency=frequency, theta=theta, phi=phi)] = value.data_array
+        else:
+            raise KeyError('Invalid indexing')
+
     # Implement of interlibrary interface functions
     def to_numpy(self):
         """Returns numpy array from internal data format
@@ -361,7 +516,7 @@ class pattern():
         else:
             if coord == 'field':
                 raise ValueError("coord must be 'theta', 'phi', or 'frequency'.")
-        if extrema_type is not 'max' or not 'min':
+        if extrema_type != 'max' or extrema_type != 'min':
             raise ValueError("extrema_type is not in 'max' or 'min'.")
 
         # get coordinates that are NOT the coordinate to search for max/min along
