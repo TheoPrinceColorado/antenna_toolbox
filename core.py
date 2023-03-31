@@ -14,6 +14,9 @@ def _get_keys_whose_values_contain_string(dictionary, search_string):
         found_keys.append(k) if search_string in dictionary[k] else None
     return found_keys
 
+def _remove_all_list_elements_in_l2_from_l1(l1, l2):
+    return [x for x in l1 if x not in l2]
+
 class pattern():
     VALID_FIELD_NAMES = [
         'Etheta',
@@ -100,16 +103,26 @@ class pattern():
         'Polarization_Angle': 'deg'
     }
 
-    DEFAULT_DIMS = ['field', 'frequency', 'theta', 'phi']
-
     FIELDS_WITH_UNITS_DB =  _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'dB')
 
-    REAL_UNITS = ['V/m', 'A/m', 'W']
+    REAL_UNITS = ['V/m', 'A/m']
     FIELD_WITH_REAL_UNITS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'V/m') \
-        + _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'A/m') \
-            + _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'W')
+        + _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'A/m')
+
+    FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV = FIELD_WITH_REAL_UNITS
+    FIELDS_UNSAFE_FOR_ADD_SUB_MUL_DIV = _remove_all_list_elements_in_l2_from_l1(DEFAULT_UNITS, FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV)
+
+    DEFAULT_DIMS = ['field', 'frequency', 'theta', 'phi']
 
     SUPPORTED_FILE_TYPES = ['.ffs', '.ffe', '.nc', '.csv']
+
+    def _get_coords_as_list(self, coord):
+        return list(self.data_array.coords[coord].values)
+
+    def _are_fields_safe_to_add_sub_mul_div(self):
+        if any(x in self._get_coords_as_list('field') for x in self.FIELDS_UNSAFE_FOR_ADD_SUB_MUL_DIV):
+            raise KeyError('Fields unsafe to apply add, subtract, multiply or divide. Try slicing fields to include only ' \
+                + str(self.FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV))
 
     def __init__(
             self,
@@ -281,34 +294,92 @@ class pattern():
     def __repr__(self):
         return self.data_array.__repr__()
 
+    def concat(self, other, dim):
+        """
+        Concatenates other to the pattern object along the dimension specified 
+        and returns a new pattern object
+
+        :param other: pattern object to concatenate
+        :type other: pattern
+        :param dim: valid field name to concatenate
+        :type dim: str
+
+        :return: 
+        :rtype: _type_
+        """
+        return pattern(data_array=xr.concat([self.data_array, other.data_array], dim=dim))
+
+    def _do_pattern_objects_contain_the_same_fields(self, other):
+        if not all(item in self._get_coords_as_list('field') for item in other._get_coords_as_list('field')):
+            raise KeyError('Fields of objects must be aligned. Try slicing along fields and then retry the operation.')
+
+    def _are_patterns_safe_to_add_sub_mul_div(self, other):
+        self._are_fields_safe_to_add_sub_mul_div()
+        other._are_fields_safe_to_add_sub_mul_div()
+        # self._do_pattern_objects_contain_the_same_fields(other)
+
+    def is_empty(self):
+        return self.data_array.size == 0
+
     def __add__(self, other):
         """
         Implements addition
         """
-        # TODO implement add dBs as either real units or just normal add
-        # TODO if adding two patterns together that have different fields, should produce only the aligned fields
-        # TODO drop or recalculate elements that are not safe for add subtract
-        return pattern(data_array=self.data_array + other.data_array)
+        if np.isscalar(other):
+            return pattern(data_array=self.data_array + other)
+        elif isinstance(other, pattern):
+            self._are_patterns_safe_to_add_sub_mul_div(other)
+            p = pattern(data_array=self.data_array + other.data_array)
+            if p.is_empty():
+                raise Warning('Resulting pattern is empty, did you mean to use pattern.concat(other_pattern)?')
+            return p
+        else:
+            raise ValueError('Can only add pattern objects and scalars')
 
     def __sub__(self, other):
         """
         Implements subtract 
         """
-        return pattern(data_array=self.data_array - other.data_array)
+        if np.isscalar(other):
+            return pattern(data_array=self.data_array - other)
+        elif isinstance(other, pattern):
+            self._are_patterns_safe_to_add_sub_mul_div(other)
+            p = pattern(data_array=self.data_array - other.data_array)
+            if p.is_empty():
+                raise Warning('Resulting pattern is empty')
+            return p
+        else:
+            raise ValueError('Can only add pattern objects and scalars')
 
     def __mul__(self, other):
         """
         Implements multiply
         """
-        # TODO implement adding dB together only
-        # TODO drop or recalculate elements that are not safe for multiply divide
-        return pattern(data_array=self.data_array * other.data_array)
+        if np.isscalar(other):
+            return pattern(data_array=self.data_array * other)
+        elif isinstance(other, pattern):
+            self._are_patterns_safe_to_add_sub_mul_div(other)
+            p = pattern(data_array=self.data_array * other.data_array)
+            if p.is_empty():
+                raise Warning('Resulting pattern is empty')
+            return p
+        else:
+            raise ValueError('Can only add pattern objects and scalars')
 
     def __truediv__(self, other):
         """
         Implements division
         """
-        return pattern(data_array=self.data_array / other.data_array) 
+        if np.isscalar(other):
+            return pattern(data_array=self.data_array / other)
+        elif isinstance(other, pattern):
+            self._are_patterns_safe_to_add_sub_mul_div(other)
+            p = pattern(data_array=self.data_array / other.data_array)
+            if p.is_empty():
+                raise Warning('Resulting pattern is empty')
+            return p
+        else:
+            raise ValueError('Can only add pattern objects and scalars')
 
     def _append_field(self, field, field_name):
         """
@@ -322,12 +393,10 @@ class pattern():
         field.coords['field'] = [field_name]
         self.data_array = xr.concat( [self.data_array, field], dim='field')
 
-    # TODO change get and set item to use a common meta indexer instead of copies of the same code
     def __getitem__(self, key):
         """
         Implement indexing
         """
-        # Consider checking np.char.isnumeric(frequency) and for theta and phi
         if isinstance(key, str):
             field = [key]
             return pattern(data_array=self.data_array.loc[dict(field=field)])
@@ -384,12 +453,10 @@ class pattern():
         else:
             raise KeyError('Invalid indexing')
         
-
     def __setitem__(self, key, value):
         """
         Implement assignment indexing
         """
-        # Consider checking np.char.isnumeric(frequency) and for theta and phi
         if isinstance(key, str):
             field = [key]
             self.data_array.loc[dict(field=field)] = value.data_array
@@ -445,7 +512,7 @@ class pattern():
             self.data_array.loc[dict(field=field, frequency=frequency, theta=theta, phi=phi)] = value.data_array
         else:
             raise KeyError('Invalid indexing')
-
+            
     # Implement of interlibrary interface functions
     def to_numpy(self):
         """Returns numpy array from internal data format
