@@ -748,7 +748,7 @@ def from_netcdf(file):
     dr.close()
     return export_pattern
     
-def read_csv(file_name, data_dict, coord_dict=core.pattern.DEFAULT_DIMS):
+def read_csv(file_name, data_dict, coord_dict=['field', 'frequency', 'theta', 'phi']):
     """
     Reads in a CSV file and returns a pattern object. The implementation uses the pandas read_csv. 
     One needs to rename the columns in the csv file to match either a default coordinate name or a field name.
