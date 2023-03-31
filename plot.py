@@ -24,7 +24,7 @@ def enable_ieee_conference_formatting():
 
     plt.rcParams['text.usetex'] = True
 
-def plot_polar_phi_cut(pattern_object, field_names, frequency, phi, field_labels=None, legend_location_in_deg=80):
+def polar_phi_cut(pattern_object, field_names, frequency, phi, field_labels=None, legend_location_in_deg=80):
     """
     Plot a phi cut of a pattern object on a polar plot
 
@@ -66,7 +66,7 @@ def plot_polar_phi_cut(pattern_object, field_names, frequency, phi, field_labels
 
     plt.tight_layout()
 
-def plot_polar_theta_cut(pattern_object, field_names, frequency, theta, field_labels=None, legend_location_in_deg=80):
+def polar_theta_cut(pattern_object, field_names, frequency, theta, field_labels=None, legend_location_in_deg=80):
     """
     Plot a theta cut of a pattern object
 
