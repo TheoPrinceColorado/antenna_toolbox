@@ -1,6 +1,7 @@
 import xarray as xr
 import pandas as pd
 import numpy as np
+import scipy as sp
 import warnings
 import copy
 from os.path import splitext
@@ -291,6 +292,22 @@ class pattern():
     def __repr__(self):
         return self.data_array.__repr__()
 
+    def _concat_in_place(self, temp, dim):
+        """
+        Concatenates other to the pattern object along the dimension specified 
+        and returns a new pattern object
+        in place version
+
+        :param other: pattern object to concatenate
+        :type other: pattern
+        :param dim: valid field name to concatenate
+        :type dim: str
+
+        :return: 
+        :rtype: pattern
+        """
+        self.data_array = xr.concat([self.data_array, temp.data_array], dim=dim)
+
     def concat(self, other, dim):
         """
         Concatenates other to the pattern object along the dimension specified 
@@ -302,7 +319,7 @@ class pattern():
         :type dim: str
 
         :return: 
-        :rtype: _type_
+        :rtype: pattern
         """
         return pattern(data_array=xr.concat([self.data_array, other.data_array], dim=dim))
 
@@ -377,18 +394,6 @@ class pattern():
             return p
         else:
             raise ValueError('Can only add pattern objects and scalars')
-
-    def _append_field(self, field, field_name):
-        """
-        Appends a field to full data object after a compute is performed
-
-        :param field: a data array with a single unnamed field
-        :type field: xr.data_array
-        :param field_name: name of the field
-        :type field_name: str
-        """
-        field.coords['field'] = [field_name]
-        self.data_array = xr.concat( [self.data_array, field], dim='field')
 
     def __getitem__(self, key):
         """
@@ -679,7 +684,49 @@ class pattern():
     #TODO compute polarization_angle
     #TODO compute axial ratio
     #TODO compute Xpol ratios
-    #TODO directivity from pattern integration
+
+    # def _pattern_integration(re_etheta, im_etheta, re_ephi, im_ephi, theta_res, phi_res, theta_meshgrid):
+    #     """
+    #     Perform integration of fields, over some spherical coordinate system, to get total power from those fields
+
+    #     :param re_etheta: real component of theta polarized field... 2D nparray that is len(theta) X len(phi) / V/m
+    #     :param im_etheta: imaginary component of theta polarized field... 2D nparray that is len(theta) X len(phi) / V/m
+    #     :param re_ephi: real component of phi polarized field... 2D nparray that is len(theta) X len(phi) / V/m
+    #     :param im_ephi: imaginary component of phi polarized field... 2D nparray that is len(theta) X len(phi) / V/m
+    #     :param theta_res: theta resolution / deg
+    #     :param phi_res: phi resolution / deg
+    #     :param theta_meshgrid: meshgrid of theta points... phi_meshgrid, theta_meshgrid = np.meshgrid(phi, theta)
+    #     :return: total power contained within said fields / W
+    #     """
+        
+    #     U_tot = 1 / (2 * constants.Z_0) * (np.abs((re_etheta + 1j*im_etheta))**2 + np.abs((re_ephi + 1j*im_ephi))**2) # W/m^2
+    #     I1 = scipy.integrate.simpson(U_tot * np.sin(np.deg2rad(np.abs(theta_meshgrid))), dx=np.deg2rad(theta_res), axis=1)
+    #     return scipy.integrate.simpson(I1, dx=np.deg2rad(phi_res))      # power / W
+
+    # def _get_spherical_coordinate_pairs
+
+    def _integrate_field_over_phi_theta(self, field, frequency, method='simpson'):
+        if method == 'simpson':
+            phi_meshgrid, theta_meshgrid = xr.broadcast(
+                self.data_array.coords['phi'], self.data_array.coords['theta'])
+            temp = self.data_array.loc[dict(field=field, frequency=frequency)] \
+                * np.sin(np.deg2rad(np.abs(theta_meshgrid.values)))
+            temp = sp.integrate.simpson(temp.to_array()[0], np.deg2rad(theta_meshgrid))
+            result = sp.integrate.simpson(temp, np.deg2rad(self.data_array.coords['phi']))
+        else:
+            raise ValueError('Method must be simpson (more planned soon)')
+
+        return result
+
+    def _convert_power_field_to_dB(self, field):
+        self.data_array.loc[dict(field=field)] = math_funcs.mag_2_db(self.data_array.loc[dict(field=field)])
+
+    def _compute_directivity(self, field, frequency, directivity_field_name, method='simpson'):
+        total_power = self._integrate_field_over_phi_theta(field, frequency, method)
+        temp = self[field, frequency] * 4 * np.pi / total_power
+        temp.data_array.coords['field'] = [directivity_field_name]
+        temp._convert_power_field_to_dB(directivity_field_name)
+        self._concat_in_place(temp, 'field')        
 
     def find_global_extrema(self, field, coord, extrema_type, **kwargs):
         """
