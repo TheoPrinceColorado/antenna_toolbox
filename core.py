@@ -25,6 +25,10 @@ class pattern():
         'Ephi',
         'ERHCP',
         'ELHCP',
+        'Htheta',
+        'Hphi',
+        'HRHCP',
+        'HLHCP',
         'Utheta',
         'Uphi',
         'URHCP',
@@ -64,14 +68,18 @@ class pattern():
         'Phi': 'deg',
         'Elevation': 'deg',
         'Azimuth': 'deg',
-        'Re_Etheta': 'V/m',
-        'Im_Etheta': 'V/m',
-        'Re_Ephi': 'V/m',
-        'Im_Ephi': 'V/m',
-        'Re_Htheta': 'A/m',
-        'Im_Htheta': 'A/m',
-        'Re_Hphi': 'A/m',
-        'Im_Hphi': 'A/m',
+        'Etheta': 'V/m',
+        'Ephi': 'V/m',
+        'ERHCP': 'V/m',
+        'ELHCP': 'V/m',
+        'Htheta': 'A/m',
+        'Hphi': 'A/m',
+        'HRHCP': 'A/m',
+        'HLHCP': 'A/m',
+        'Utheta': 'W/m**2',
+        'Uphi': 'W/m**2',
+        'URHCP': 'W/m**2',
+        'ULHCP': 'W/m**2',
         'Directivity_Theta': 'dBi',
         'Directivity_Phi': 'dBi',
         'Directivity_Total': 'dBi',
@@ -295,7 +303,6 @@ class pattern():
     def _concat_in_place(self, temp, dim):
         """
         Concatenates other to the pattern object along the dimension specified 
-        and returns a new pattern object
         in place version
 
         :param other: pattern object to concatenate
@@ -718,6 +725,21 @@ class pattern():
 
         return result
 
+    def compute_total_power(self, field, frequency, method='simpson'):
+        """
+        Computes the total power of the passed field at a particular frequency
+
+        :param field: a power field
+        :type field: str
+        :param frequency: frequency
+        :type frequency: number
+        :param method: method to use for integration, defaults to 'simpson'
+        :type method: str, optional
+        :return: the total powerr in W
+        :rtype: number
+        """
+        return self._integrate_field_over_phi_theta(field, frequency, method)
+
     def _convert_power_field_to_dB(self, field):
         self.data_array.loc[dict(field=field)] = math_funcs.mag_2_db(self.data_array.loc[dict(field=field)])
 
@@ -727,6 +749,37 @@ class pattern():
         temp.data_array.coords['field'] = [directivity_field_name]
         temp._convert_power_field_to_dB(directivity_field_name)
         self._concat_in_place(temp, 'field')        
+
+    def _compute_directivity(self, field, directivity_field_name, method='simpson'):
+        first = True
+        for f in self.data_array.coords['frequency'].values:
+            if first:
+                slice = self[field, f]    
+                slice._compute_directivity(field, f, directivity_field_name)
+                first = False
+            else:
+                slice_2 = self[field, f]
+                slice_2._compute_directivity(field, f, directivity_field_name)
+                slice._concat_in_place(slice_2, 'frequency')
+        self._concat_in_place(slice[directivity_field_name], 'field')
+
+    def compute_directivity_phi(self, method='simpson'):
+        self._compute_directivity('Uphi', 'Directivity_Phi', method)
+
+    def compute_directivity_theta(self, method='simpson'):
+        self._compute_directivity('Utheta', 'Directivity_Theta', method)
+
+    def compute_directivity_LHCP(self, method='simpson'):
+        self._compute_directivity('ULHCP', 'Directivity_LHCP', method)
+
+    def compute_directivity_RHCP(self, method='simpson'):
+        self._compute_directivity('URHCP', 'Directivity_RHCP', method)
+
+    def compute_directivity_L3X(self, method='simpson'):
+        self._compute_directivity('UL3X', 'Directivity_L3X', method)
+
+    def compute_directivity_L3Y(self, method='simpson'):
+        self._compute_directivity('UL3Y', 'Directivity_L3Y', method)
 
     def find_global_extrema(self, field, coord, extrema_type, **kwargs):
         """
