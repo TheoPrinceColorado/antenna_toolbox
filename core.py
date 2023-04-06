@@ -561,7 +561,7 @@ class pattern():
         self.compute_EL3X_from_linear_E() if 'E3X' in field_str_array else None
         self.compute_EL3Y_from_linear_E() if 'E3Y' in field_str_array else None
 
-        # I'm not 100% sure it makes sense to just use thesese functions automatically 
+        # I'm not 100% sure it makes sense to just use these functions automatically 
         # since the success of these functions is predicated on other fields existing
         # , but I can't think of a better way to do it
         self.compute_Utheta_from_Etheta() if 'Utheta' in field_str_array else None
@@ -570,6 +570,9 @@ class pattern():
         self.compute_ULHCP_from_ELHCP() if 'ULHCP' in field_str_array else None
         self.compute_UL3X_from_EL3X() if 'UL3X' in field_str_array else None
         self.compute_UL3Y_from_EL3Y() if 'UL3Y' in field_str_array else None
+
+        # TODO add directivity, gain and realized gain
+        # Unsure of how to do this because the gain and realized gain method require
 
     def _append_field(self, field, field_name):
         """
@@ -692,27 +695,20 @@ class pattern():
     #TODO compute axial ratio
     #TODO compute Xpol ratios
 
-    # def _pattern_integration(re_etheta, im_etheta, re_ephi, im_ephi, theta_res, phi_res, theta_meshgrid):
-    #     """
-    #     Perform integration of fields, over some spherical coordinate system, to get total power from those fields
-
-    #     :param re_etheta: real component of theta polarized field... 2D nparray that is len(theta) X len(phi) / V/m
-    #     :param im_etheta: imaginary component of theta polarized field... 2D nparray that is len(theta) X len(phi) / V/m
-    #     :param re_ephi: real component of phi polarized field... 2D nparray that is len(theta) X len(phi) / V/m
-    #     :param im_ephi: imaginary component of phi polarized field... 2D nparray that is len(theta) X len(phi) / V/m
-    #     :param theta_res: theta resolution / deg
-    #     :param phi_res: phi resolution / deg
-    #     :param theta_meshgrid: meshgrid of theta points... phi_meshgrid, theta_meshgrid = np.meshgrid(phi, theta)
-    #     :return: total power contained within said fields / W
-    #     """
-        
-    #     U_tot = 1 / (2 * constants.Z_0) * (np.abs((re_etheta + 1j*im_etheta))**2 + np.abs((re_ephi + 1j*im_ephi))**2) # W/m^2
-    #     I1 = scipy.integrate.simpson(U_tot * np.sin(np.deg2rad(np.abs(theta_meshgrid))), dx=np.deg2rad(theta_res), axis=1)
-    #     return scipy.integrate.simpson(I1, dx=np.deg2rad(phi_res))      # power / W
-
-    # def _get_spherical_coordinate_pairs
-
     def _integrate_field_over_phi_theta(self, field, frequency, method='simpson'):
+        """
+        Integrates a field over phi and theta using the approximation 'method'
+
+        :param field: a power field
+        :type field: str
+        :param frequency: frequency
+        :type frequency: number
+        :param method: method to use for integration, defaults to 'simpson'
+        :type method: str, optional
+        :raises ValueError: Unsupported method passed
+        :return: the result of the integral
+        :rtype: number
+        """
         if method == 'simpson':
             phi_meshgrid, theta_meshgrid = xr.broadcast(
                 self.data_array.coords['phi'], self.data_array.coords['theta'])
@@ -729,6 +725,9 @@ class pattern():
         """
         Computes the total power of the passed field at a particular frequency
 
+        Sources:
+            [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
+
         :param field: a power field
         :type field: str
         :param frequency: frequency
@@ -741,9 +740,31 @@ class pattern():
         return self._integrate_field_over_phi_theta(field, frequency, method)
 
     def _convert_power_field_to_dB(self, field):
+        """
+        Converts a real unit power field to dB in place
+
+        :param field: power field
+        :type field: str
+        """
         self.data_array.loc[dict(field=field)] = math_funcs.mag_2_db(self.data_array.loc[dict(field=field)])
 
-    def _compute_directivity(self, field, frequency, directivity_field_name, method='simpson'):
+    def _compute_directivity_at_f(self, field, frequency, directivity_field_name, method='simpson'):
+        """
+        Computes directivity given a power field
+
+        Sources:
+            [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
+
+        :param field: power field
+        :type field: str
+        :param frequency: frequency at which to calculate the directivity
+        :type frequency: number
+        :param directivity_field_name: name of the directivity field
+        :type directivity_field_name: str
+        :param method: method to use for integration, defaults to 'simpson'
+        :type method: str, optional
+        """
+
         total_power = self._integrate_field_over_phi_theta(field, frequency, method)
         temp = self[field, frequency] * 4 * np.pi / total_power
         temp.data_array.coords['field'] = [directivity_field_name]
@@ -751,35 +772,166 @@ class pattern():
         self._concat_in_place(temp, 'field')        
 
     def _compute_directivity(self, field, directivity_field_name, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
         first = True
         for f in self.data_array.coords['frequency'].values:
             if first:
                 slice = self[field, f]    
-                slice._compute_directivity(field, f, directivity_field_name)
+                slice._compute_directivity_at_f(field, f, directivity_field_name)
                 first = False
             else:
                 slice_2 = self[field, f]
-                slice_2._compute_directivity(field, f, directivity_field_name)
+                slice_2._compute_directivity_at_f(field, f, directivity_field_name)
                 slice._concat_in_place(slice_2, 'frequency')
         self._concat_in_place(slice[directivity_field_name], 'field')
 
     def compute_directivity_phi(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
         self._compute_directivity('Uphi', 'Directivity_Phi', method)
 
     def compute_directivity_theta(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
         self._compute_directivity('Utheta', 'Directivity_Theta', method)
 
     def compute_directivity_LHCP(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
         self._compute_directivity('ULHCP', 'Directivity_LHCP', method)
 
     def compute_directivity_RHCP(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
         self._compute_directivity('URHCP', 'Directivity_RHCP', method)
 
     def compute_directivity_L3X(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
         self._compute_directivity('UL3X', 'Directivity_L3X', method)
 
     def compute_directivity_L3Y(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
         self._compute_directivity('UL3Y', 'Directivity_L3Y', method)
+
+    def _compute_gain(self, directivity_field, gain_field, radiation_efficiency):
+        """
+        Computes gain from the directivity, and radiation efficiency
+
+        Sources:
+            [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
+
+        :param directivity_field: Field's directivity
+        :type directivity_field: str
+        :param gain_field: Name of the realized gain field
+        :type gain_field: str
+        :param radiation_efficiency: Value of the radiation efficiency (i.e. 0.69)
+        :type radiation_efficiency: number
+        """
+        temp = self[directivity_field] + math_funcs.mag2dB(radiation_efficiency)
+        temp.data_array.coords['field'] = [gain_field]
+        self._concat_in_place(temp, 'field')
+
+    def compute_gain_phi(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_Phi', 'Gain_Phi', radiation_efficiency)
+
+    def compute_gain_theta(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_Theta', 'Gain_Theta', radiation_efficiency)
+
+    def compute_gain_LHCP(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_LHCP', 'Gain_LHCP', radiation_efficiency)
+
+    def compute_gain_RHCP(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_RHCP', 'Gain_RHCP', radiation_efficiency)
+
+    def compute_gain_L3X(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_L3X', 'Gain_L3X', radiation_efficiency)
+
+    def compute_gain_L3Y(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_L3Y', 'Gain_L3Y', radiation_efficiency)
+
+    def _compute_realized_gain(self, directivity_field, gain_field, mismatch_efficiency, radiation_efficiency):
+        """
+        Computes realized gain from the directivity, mismatch efficiency, and radiation efficiency
+
+        Sources:
+            [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
+
+        :param directivity_field: Field's directivity
+        :type directivity_field: str
+        :param gain_field: Name of the realized gain field
+        :type gain_field: str
+        :param mismatch_efficiency: Value of the mismatch efficiency (i.e. 0.63)
+        :type mismatch_efficiency: number
+        :param radiation_efficiency: Value of the radiation efficiency (i.e. 0.69)
+        :type radiation_efficiency: number
+        """
+        temp = self[directivity_field] + math_funcs.mag2dB(mismatch_efficiency) + math_funcs.mag2dB(radiation_efficiency)
+        temp.data_array.coords['field'] = [gain_field]
+        self._concat_in_place(temp, 'field')
+
+    def compute_gain_phi(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_Phi', 'Realized_Gain_Phi', mismatch_efficiency, radiation_efficiency)
+
+    def compute_gain_theta(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_Theta', 'Realized_Gain_Theta', mismatch_efficiency, radiation_efficiency)
+
+    def compute_gain_LHCP(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_LHCP', 'Realized_Gain_LHCP', mismatch_efficiency, radiation_efficiency)
+
+    def compute_gain_RHCP(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_RHCP', 'Realized_Gain_RHCP', mismatch_efficiency, radiation_efficiency)
+
+    def compute_gain_L3X(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_L3X', 'Realized_Gain_L3X', mismatch_efficiency, radiation_efficiency)
+
+    def compute_gain_L3Y(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_L3Y', 'Realized_Gain_L3Y', mismatch_efficiency, radiation_efficiency)
 
     def find_global_extrema(self, field, coord, extrema_type, **kwargs):
         """
