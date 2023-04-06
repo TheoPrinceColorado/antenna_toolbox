@@ -62,24 +62,29 @@ class pattern():
         'Polarization_Angle'
     ]
 
+    ANGLE_UNITS = 'deg'
+    E_FIELD_UNITS = 'V/m'
+    H_FIELD_UNITS = 'A/m'
+    POWER_FIELD_UNITS = 'W/m**2'
+
     DEFAULT_UNITS = {
         'Frequency': 'Hz',
-        'Theta': 'deg',
-        'Phi': 'deg',
-        'Elevation': 'deg',
-        'Azimuth': 'deg',
-        'Etheta': 'V/m',
-        'Ephi': 'V/m',
-        'ERHCP': 'V/m',
-        'ELHCP': 'V/m',
-        'Htheta': 'A/m',
-        'Hphi': 'A/m',
-        'HRHCP': 'A/m',
-        'HLHCP': 'A/m',
-        'Utheta': 'W/m**2',
-        'Uphi': 'W/m**2',
-        'URHCP': 'W/m**2',
-        'ULHCP': 'W/m**2',
+        'Theta': ANGLE_UNITS,
+        'Phi': ANGLE_UNITS,
+        'Elevation': ANGLE_UNITS,
+        'Azimuth': ANGLE_UNITS,
+        'Etheta': E_FIELD_UNITS,
+        'Ephi': E_FIELD_UNITS,
+        'ERHCP': E_FIELD_UNITS,
+        'ELHCP': E_FIELD_UNITS,
+        'Htheta': H_FIELD_UNITS,
+        'Hphi': H_FIELD_UNITS,
+        'HRHCP': H_FIELD_UNITS,
+        'HLHCP': H_FIELD_UNITS,
+        'Utheta': POWER_FIELD_UNITS,
+        'Uphi': POWER_FIELD_UNITS,
+        'URHCP': POWER_FIELD_UNITS,
+        'ULHCP': POWER_FIELD_UNITS,
         'Directivity_Theta': 'dBi',
         'Directivity_Phi': 'dBi',
         'Directivity_Total': 'dBi',
@@ -111,9 +116,10 @@ class pattern():
 
     FIELDS_WITH_UNITS_DB =  _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'dB')
 
-    REAL_UNITS = ['V/m', 'A/m']
-    FIELD_WITH_REAL_UNITS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'V/m') \
-        + _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'A/m')
+    REAL_UNITS = [E_FIELD_UNITS, H_FIELD_UNITS]
+    FIELD_WITH_REAL_UNITS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, E_FIELD_UNITS) \
+        + _get_keys_whose_values_contain_string(DEFAULT_UNITS, H_FIELD_UNITS)
+    POWER_FIELDS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, POWER_FIELD_UNITS)
 
     FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV = FIELD_WITH_REAL_UNITS
     FIELDS_UNSAFE_FOR_ADD_SUB_MUL_DIV = _remove_all_list_elements_in_l2_from_l1(DEFAULT_UNITS, FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV)
@@ -737,6 +743,8 @@ class pattern():
         :return: the total powerr in W
         :rtype: number
         """
+        if not (field in self.POWER_FIELDS):
+            raise ValueError('Must pass a power field: ' + str(self.POWER_FIELDS))
         return self._integrate_field_over_phi_theta(field, frequency, method)
 
     def _convert_power_field_to_dB(self, field):
