@@ -144,6 +144,23 @@ class pattern():
 
     SUPPORTED_FILE_TYPES = ['.ffs', '.ffe', '.nc', '.csv']
 
+    class _attrs():
+        def __init__(self):
+            pass
+
+        def __getitem__(self, key):
+            """
+            Implement indexing
+            """
+
+            return getattr(self, key)
+
+        def __setitem__(self, key, value):
+            """
+            Implement assignment indexing
+            """
+            return setattr(self, key, value)
+
     def _get_coords_as_list(self, coord):
         return list(self.data_array.coords[coord].values)
 
@@ -240,8 +257,14 @@ class pattern():
                 kwarg_fields[key] = value
             elif key in pattern.DEFAULT_DIMS:
                 kwarg_coords[key] = value
+            elif key == 'attrs':
+                self.attrs = value
             else:
                 raise ValueError("Passed kwarg is not a support field or a recognized argument. " + str(key))
+
+        # if no attributes are passed then create an empty attributes object
+        if not hasattr(self, 'attrs'):
+            self.attrs = pattern._attrs()
 
         # if kwargs passed with field names, combine all of the field data into one
         if len(kwarg_fields) > 0:
@@ -1057,7 +1080,7 @@ class pattern():
         """
         This function finds the global minimum and maximum value in the theta and phi space of a field
         These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
-            i.e. accessing pattern_object.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
+            i.e. accessing pattern_object.attrs.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
 
         :param field: field name to find the extrema in 
         :type field: str
@@ -1074,7 +1097,7 @@ class pattern():
         """
         This function finds the global minimum value in the theta and phi space of a field
         These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
-            i.e. accessing pattern_object.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
+            i.e. accessing pattern_object.attrs.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
 
         :param field: field name to find the extrema in 
         :type field: str
@@ -1084,7 +1107,7 @@ class pattern():
         """
         minimum_versus_frequency = self.self.data_array.loc[field].min(['theta', 'phi']).to_numpy()
         attr_name = 'Min_' + field
-        setattr(self, attr_name, minimum_versus_frequency)
+        setattr(self.attrs, attr_name, minimum_versus_frequency)
 
         return minimum_versus_frequency        
 
@@ -1098,7 +1121,7 @@ class pattern():
         """
         This function finds the global maximum value in the theta and phi space of a field
         These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
-            i.e. accessing pattern_object.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
+            i.e. accessing pattern_object.attrs.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
 
         :param field: field name to find the extrema in 
         :type field: str
@@ -1108,18 +1131,18 @@ class pattern():
         """
         maximum_versus_frequency = self.self.data_array.loc[field].max(['theta', 'phi']).to_numpy()
         attr_name = 'Max_' + field
-        setattr(self, attr_name, maximum_versus_frequency)
+        setattr(self.attrs, attr_name, maximum_versus_frequency)
 
         return maximum_versus_frequency
 
     def _find_global_extrema(self, field, coord, extrema_type, **kwargs):
         """
         Finds the maximum of a data field for every coordinate. Saves data as a DataArray that is an attribute of
-        pattern.data_array with the following naming convention: <extrema_type>_<field>_vs_<coord>. Ex: Find maximum
-        Directivity_L3Y vs frequency, then the data is stored as pattern.data_array.max_Directivity_L3Y_vs_frequency.
+        pattern_object with the following naming convention: pattern_object.attrs.<extrema_type>_<field>_vs_<coord>. Ex: Find maximum
+        Directivity_L3Y vs frequency, then the data is stored as pattern_object.attrs.max_Directivity_L3Y_vs_frequency.
         
-        Coordinates for the maximum data are saved as <extrema_type>_<field>_vs_<coord>_<remaining_coord_0> and 
-        <extrema_type>_<field>_vs_<coord>_<remaining_coord_1>.
+        Coordinates for the maximum data are saved as pattern_object.attrs.<extrema_type>_<field>_vs_<coord>_<remaining_coord_0> and 
+        pattern_object.attrs.<extrema_type>_<field>_vs_<coord>_<remaining_coord_1>.
         
         All data is saved as a numpy array, which goes along the 'coord' argument.
 
@@ -1169,19 +1192,19 @@ class pattern():
         # find maximum or minimum vs coord
         arg = None
         if extrema_type == 'max':
-            setattr(self, save_name, self.data_array.loc[field].max(remaining_coords).to_numpy())
+            setattr(self.attrs, save_name, self.data_array.loc[field].max(remaining_coords).to_numpy())
             arg = self.data_array.loc[field].argmax(remaining_coords)
         elif extrema_type == 'min':
-            setattr(self, save_name, self.data_array.loc[field].min(remaining_coords).to_numpy())
+            setattr(self.attrs, save_name, self.data_array.loc[field].min(remaining_coords).to_numpy())
             arg = self.data_array.loc[field].argmin(remaining_coords)
-        setattr(self, save_name + '_' + remaining_coords[0], self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy())
-        setattr(self, save_name + '_' + remaining_coords[1], self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy())
+        setattr(self.attrs, save_name + '_' + remaining_coords[0], self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy())
+        setattr(self.attrs, save_name + '_' + remaining_coords[1], self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy())
 
     def compute_aperture_efficiency(self, field, area, **kwargs):
         """
         Computes aperture efficiency given a gain or directivity field and the aperture area. 
         Stores the result versus frequency as 1 D numpy array 
-        in the object field with the format Aperture_Efficiency_<field>.
+        in the object field with the format pattern_object.attrs.Aperture_Efficiency_<field>.
 
         :param field: type of pattern, from VALID_FIELD_NAMES, to compute aperture efficiency from... basically
         specifies polarization
@@ -1271,8 +1294,8 @@ class pattern():
             self._find_global_extrema(field, 'frequency', 'max')                              # find beam peak location
             peak_theta_angle_name = 'max_' + field + '_vs_frequency_theta'                   # name of peak theta angle data
             peak_phi_angle_name = 'max_' + field + '_vs_frequency_phi'                       # name of peak phi angle data
-            peak_angle_theta = getattr(self, peak_theta_angle_name)                        # get beam peak location in theta
-            peak_angle_phi = getattr(self, peak_phi_angle_name)                             # get beam peak location in phi
+            peak_angle_theta = getattr(self.attrs, peak_theta_angle_name)                        # get beam peak location in theta
+            peak_angle_phi = getattr(self.attrs, peak_phi_angle_name)                             # get beam peak location in phi
             if area_arg_projected:
                 projected_area = area
             else:
@@ -1281,11 +1304,11 @@ class pattern():
         result = ap_eff(peak_pattern, projected_area).flatten()                                     # compute aperture efficiency
         
         # store apperture efficiency
-        setattr(self, save_name, result)
+        setattr(self.attrs, save_name, result)
         # store apperture area
-        setattr(self, 'Aperture_Area', area)
+        setattr(self.attrs, 'Aperture_Area', area)
         # store projected area
-        setattr(self, 'Aperture_Projected_Area', projected_area)
+        setattr(self.attrs, 'Aperture_Projected_Area', projected_area)
 
         return result
 
@@ -1297,7 +1320,7 @@ class pattern():
         """
         Computes some amplitude beamwidth (ex: -3 dB BW) of an antenna pattern in a specific plane. Computed at each frequency
         Result is stored as pattern attribute with the following naming convention:
-        'Beamwidth_<bw_setting>dB_<field>_<param_plane[0]>_<param_plane[1]>deg'
+        pattern_object.attrs.Beamwidth_<bw_setting>dB_<field>_<param_plane[0]>_<param_plane[1]>deg
         
         :param field: pattern type to find beamwidth of... from VALID_FIELD_NAMES
         :type field: string
@@ -1455,7 +1478,7 @@ class pattern():
         result = np.array(bw_result)
 
         # store beamwidth results
-        setattr(self, save_name, result)
+        setattr(self.attrs, save_name, result)
 
         return result
               
