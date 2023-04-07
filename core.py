@@ -1061,9 +1061,14 @@ class pattern():
 
         :param field: field name to find the extrema in 
         :type field: str
+
+        :return: A dictionary with keys maximum and minimum that contain the results from the find_min and find_max calls
+        :rtype: 1 D numpy array
         """
-        self.find_min(field)
-        self.find_max(field)
+        max = self.find_min(field)
+        min = self.find_max(field)
+
+        return {'Max': max, 'Min': min}
         
     def find_min(self, field):
         """
@@ -1073,10 +1078,15 @@ class pattern():
 
         :param field: field name to find the extrema in 
         :type field: str
+
+        :return: The minimum
+        :rtype: 1 D numpy array versus frequency 
         """
-        maximum_versus_frequency = self.self.data_array.loc[field].min(['theta', 'phi']).to_numpy()
+        minimum_versus_frequency = self.self.data_array.loc[field].min(['theta', 'phi']).to_numpy()
         attr_name = 'Min_' + field
-        setattr(self, attr_name, maximum_versus_frequency)        
+        setattr(self, attr_name, minimum_versus_frequency)
+
+        return minimum_versus_frequency        
 
     def find_peak(self, field):
         """
@@ -1092,20 +1102,90 @@ class pattern():
 
         :param field: field name to find the extrema in 
         :type field: str
+
+        :return: The maximum
+        :rtype: 1 D numpy array versus frequency
         """
         maximum_versus_frequency = self.self.data_array.loc[field].max(['theta', 'phi']).to_numpy()
         attr_name = 'Max_' + field
         setattr(self, attr_name, maximum_versus_frequency)
 
-    def calc_aperture_efficiency(self, pattern_type, area, **kwargs):
-        """
-        Computes aperture efficiency for the antenna given an aperture area. Sets
-        data_array.attrs.'aperture_efficiency_<pattern_type>' to a numpy array containing aperture efficiency vs
-        data_array.frequency (%) and  _data_array.attrs.'aperture_area' to float from argument area (m)
+        return maximum_versus_frequency
 
-        :param pattern_type: type of pattern, from VALID_FIELD_NAMES, to compute aperture efficiency from... basically
+    def _find_global_extrema(self, field, coord, extrema_type, **kwargs):
+        """
+        Finds the maximum of a data field for every coordinate. Saves data as a DataArray that is an attribute of
+        pattern.data_array with the following naming convention: <extrema_type>_<field>_vs_<coord>. Ex: Find maximum
+        Directivity_L3Y vs frequency, then the data is stored as pattern.data_array.max_Directivity_L3Y_vs_frequency.
+        
+        Coordinates for the maximum data are saved as <extrema_type>_<field>_vs_<coord>_<remaining_coord_0> and 
+        <extrema_type>_<field>_vs_<coord>_<remaining_coord_1>.
+        
+        All data is saved as a numpy array, which goes along the 'coord' argument.
+
+        Essentially a wrapper around xarray.DataArray.max
+        (http://xarray.pydata.org/en/stable/generated/xarray.DataArray.max.html)
+
+        :param field: field in data_array to search for abs max or min in
+        :type field: string
+
+        :param coord: coordinate along which abs max or min is searched for (ex: frequency)
+        :type coord: string
+
+        :param extrema_type: 'max' or 'min' depending on if max or minimum data is desired
+        :type extrema_type: string
+
+        :param **save_name: string to save the name of the calculation as something other than
+        '<extrema_type>_<field>_vs_<coord>'
+        :type **save_name: string
+        
+        """
+
+        # generate save name
+        sep = '_'  # I simply did not feel like typing a bunch of underscores and quotes
+        vs = 'vs'  # more lazy codeeeeeee
+        save_name = extrema_type + sep + field + sep + vs + sep + coord
+
+        # handle kwargs
+        for key in kwargs.keys():
+            if key == 'save_name':
+                save_name = kwargs[key]
+
+        # error handling
+        if not _check_field_in_valid_fields(field):
+            raise ValueError('field is not in pattern.VALID_FIELD_NAMES.')
+        if coord not in self.DEFAULT_DIMS:
+            raise ValueError('coord is not in pattern.DEFAULT_DIMS.')
+        else:
+            if coord == 'field':
+                raise ValueError("coord must be 'theta', 'phi', or 'frequency'.")
+        if extrema_type != 'max' or extrema_type != 'min':
+            raise ValueError("extrema_type is not in 'max' or 'min'.")
+
+        # get coordinates that are NOT the coordinate to search for max/min along
+        remaining_coords = ['frequency', 'theta', 'phi']
+        remaining_coords.remove(coord)
+
+        # find maximum or minimum vs coord
+        arg = None
+        if extrema_type == 'max':
+            setattr(self, save_name, self.data_array.loc[field].max(remaining_coords).to_numpy())
+            arg = self.data_array.loc[field].argmax(remaining_coords)
+        elif extrema_type == 'min':
+            setattr(self, save_name, self.data_array.loc[field].min(remaining_coords).to_numpy())
+            arg = self.data_array.loc[field].argmin(remaining_coords)
+        setattr(self, save_name + '_' + remaining_coords[0], self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy())
+        setattr(self, save_name + '_' + remaining_coords[1], self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy())
+
+    def compute_aperture_efficiency(self, field, area, **kwargs):
+        """
+        Computes aperture efficiency given a gain or directivity field and the aperture area. 
+        Stores the result versus frequency as 1 D numpy array 
+        in the object field with the format Aperture_Efficiency_<field>.
+
+        :param field: type of pattern, from VALID_FIELD_NAMES, to compute aperture efficiency from... basically
         specifies polarization
-        :type pattern_type: str
+        :type field: str
 
         :param area: aperture area / m
         :type area: float or int
@@ -1125,18 +1205,21 @@ class pattern():
         :type **aperture_normal: numpy array of length 3
 
         :param **save_name: string to save the name of the calculation as something other than 'aperture_efficiency_
-        <pattern_type>'
+        <field>'
         :type **save_name: string
         
         :param **area_arg_projected: if True, argument area is used to compute aperture efficiency regardless of where beam peak is (default False)
         :type **area_arg_projected: bool
+
+        :return: The aperture efficiency
+        :rtype: 1 D numpy array
         """
 
         # handle kwargs
         beam_peak = (0, 0)
         peak_finding = False
         aperture_normal = np.array([0, 0, 1])
-        save_name = 'aperture_efficiency_' + pattern_type
+        save_name = 'Aperture_Efficiency_' + field
         area_arg_projected = False
         for key in kwargs.keys():
             if key == 'beam_peak':
@@ -1151,11 +1234,11 @@ class pattern():
                 area_arg_projected = kwargs[key]
 
         # error handling to see if field is an actual antenna pattern
-        if _check_field_in_valid_fields(pattern_type):
-            if not ('Directivity' in pattern_type or 'Gain' in pattern_type):
-                raise ValueError('pattern_type is not a radiation pattern (gain or directivity).')
+        if _check_field_in_valid_fields(field):
+            if not ('Directivity' in field or 'Gain' in field):
+                raise ValueError('field is not a radiation pattern (gain or directivity).')
         else:
-            raise ValueError('pattern_type is not in pattern.VALID_FIELD_NAMES.')
+            raise ValueError('field is not in pattern.VALID_FIELD_NAMES.')
 
         # aperture efficiency function
         def ap_eff(pat_value, area_arg):
@@ -1185,33 +1268,39 @@ class pattern():
             else:
                 projected_area = area * np.cos(np.deg2rad(beam_peak[0]))
         elif peak_finding: 
-            self.find_global_extrema(pattern_type, 'frequency', 'max')                              # find beam peak location
-            peak_theta_angle_name = 'max_' + pattern_type + '_vs_frequency_theta'                   # name of peak theta angle data
-            peak_phi_angle_name = 'max_' + pattern_type + '_vs_frequency_phi'                       # name of peak phi angle data
-            peak_angle_theta = self.data_array.attrs[peak_theta_angle_name]                         # get beam peak location in theta
-            peak_angle_phi = self.data_array.attrs[peak_phi_angle_name]                             # get beam peak location in phi
+            self._find_global_extrema(field, 'frequency', 'max')                              # find beam peak location
+            peak_theta_angle_name = 'max_' + field + '_vs_frequency_theta'                   # name of peak theta angle data
+            peak_phi_angle_name = 'max_' + field + '_vs_frequency_phi'                       # name of peak phi angle data
+            peak_angle_theta = getattr(self, peak_theta_angle_name)                        # get beam peak location in theta
+            peak_angle_phi = getattr(self, peak_phi_angle_name)                             # get beam peak location in phi
             if area_arg_projected:
                 projected_area = area
             else:
                 projected_area = area * np.cos(np.deg2rad(peak_angle_theta))
-        peak_pattern = self.data_array.loc[pattern_type, :, peak_angle_theta, peak_angle_phi].values
+        peak_pattern = self.data_array.loc[field, :, peak_angle_theta, peak_angle_phi].values
         result = ap_eff(peak_pattern, projected_area).flatten()                                     # compute aperture efficiency
-        self.data_array.attrs[save_name] = result                                                   # store aperture efficiency
-        self.data_array.attrs['aperture_area'] = area                                               # store aperture area
-        self.data_array.attrs['aperture_projected_area'] = projected_area                           # store projected area
-
-    # TODO implement calc_phase_center
-    def calc_phase_center(self):
-        pass
         
-    def find_beamwidth(self, pattern_type, bw_setting, plane, **kwargs):
+        # store apperture efficiency
+        setattr(self, save_name, result)
+        # store apperture area
+        setattr(self, 'Aperture_Area', area)
+        # store projected area
+        setattr(self, 'Aperture_Projected_Area', projected_area)
+
+        return result
+
+    # # TODO implement calc_phase_center
+    # def calc_phase_center(self):
+    #     pass
+        
+    def find_beamwidth(self, field, bw_setting, plane, **kwargs):
         """
         Computes some amplitude beamwidth (ex: -3 dB BW) of an antenna pattern in a specific plane. Computed at each frequency
-        Result is stored as an attribute in self.data_array with the following naming convention:
-        'beamwidth_<bw_setting>dB_<pattern_type>_<param_plane[0]>_<param_plane[1]>deg'
+        Result is stored as pattern attribute with the following naming convention:
+        'Beamwidth_<bw_setting>dB_<field>_<param_plane[0]>_<param_plane[1]>deg'
         
-        :param pattern_type: pattern type to find beamwidth of... from VALID_FIELD_NAMES
-        :type pattern_type: string
+        :param field: pattern type to find beamwidth of... from VALID_FIELD_NAMES
+        :type field: string
         
         :param bw_setting: beamwidth, down from beam peak, in dB (ex: -3 dB)
         :type bw_setting: float
@@ -1219,32 +1308,34 @@ class pattern():
         :param plane: tuple containing angular coordinate (theta or phi), and its value (deg) for cut that beamwidth is in
         :type plane: tuple (string, float)
         
-        :param **save_name: string to save the name of the calculation as something other than 'beamwidth_<bw_setting>_<pattern_type>_<param_plane[0]>_<param_plane[1]>deg'
+        :param **save_name: string to save the name of the calculation as something other than 'beamwidth_<bw_setting>_<field>_<param_plane[0]>_<param_plane[1]>deg'
         :type **save_name: string
 
+        :return: The beamwidth
+        :rtype: 1 D numpy array
         """
-        
+
         # handle kwargs
-        save_name = 'beamwidth_' + str(bw_setting).replace('.', 'p') + '_' + pattern_type + '_' + plane[0] + '_' + str(plane[1]).replace('.', 'p')
+        save_name = 'Beamwidth_' + str(bw_setting).replace('.', 'p') + '_' + field + '_' + plane[0] + '_' + str(plane[1]).replace('.', 'p')
         for key in kwargs:
             if key == 'save_name':
                 save_name = kwargs[key]
         
         # error handling to see if field is an actual antenna pattern
-        if _check_field_in_valid_fields(pattern_type):
-            if not ('Directivity' in pattern_type or 'Gain' in pattern_type):
-                raise ValueError('pattern_type is not a radiation pattern (gain or directivity).')
+        if _check_field_in_valid_fields(field):
+            if not ('Directivity' in field or 'Gain' in field):
+                raise ValueError('field is not a radiation pattern (gain or directivity).')
         else:
-            raise ValueError('pattern_type is not in pattern.VALID_FIELD_NAMES.')
+            raise ValueError('field is not in pattern.VALID_FIELD_NAMES.')
         
         # get data in the specified cut, error handling
         data_xr = None
         opposite_coord = None           # used for slicing data later
         if plane[0] == 'theta':
-            data_xr = self.data_array.loc[pattern_type, :, plane[1], :]
+            data_xr = self.data_array.loc[field, :, plane[1], :]
             opposite_coord = 'phi'
         elif plane[0] == 'phi':
-            data_xr = self.data_array.loc[pattern_type, :, :, plane[1]]
+            data_xr = self.data_array.loc[field, :, :, plane[1]]
             opposite_coord = 'theta'
         else: 
             raise ValueError("First element of argument 'plane' is not either 'theta' or 'phi'.")
@@ -1361,8 +1452,12 @@ class pattern():
                 angle_right = (bw_amp - b_right) / m_right
                 bw_result.append(np.abs(angle_right - angle_left))
         
+        result = np.array(bw_result)
+
         # store beamwidth results
-        self.data_array.attrs[save_name] = np.array(bw_result)
+        setattr(self, save_name, result)
+
+        return result
               
     def sph_2_array_coordinates(self):
         """
