@@ -5,25 +5,59 @@ Contains math functions useful for antenna engineering
 import numpy as np
 
 
-def mag_2_db(x):
+def power_2_db(x):
     """
-    Converts a number in linear to dB.
+    Converts a power to dB.
 
-    :param x: complex number in linear
-    :return: magnitude of complex number in dB
+    :param x: complex number
+    :return: dB
     """
     return 10 * np.log10(np.abs(x))
 
-
-def db_2_mag(x):
+def voltage_2_db(x):
     """
-    Converts a magnitude in dB to magnitude in linear.
+    Converts voltage to dB.
+
+    :param x: complex number in linear
+    :return: dB
+    """
+    return power_2_db(x) * 2
+
+def amps_2_db(x):
+    """
+    Converts a amperage to dB
+
+    :param x: complex number
+    :return: dB
+    """
+    return power_2_db(x) * 2
+
+def db_2_power(x):
+    """
+    Converts a magnitude in dB to magnitude in power
 
     :param x: magnitude in dB
-    :return: magnitude in linear
+    :return: magnitude in power
     """
     return 10**(x/10)
 
+def db_2_voltage(x):
+    """
+    Converts a magnitude in dB to magnitude in voltage
+
+    :param x: magnitude in dB
+    :return: magnitude in voltage
+    """
+    return 10**(x/20)
+
+def db_2_amperage(x):
+    """
+    Converts a magnitude in dB to magnitude in amperage
+
+    :param x: magnitude in dB
+    :return: magnitude in amperage
+    """
+    return 10**(x/10)
 
 def sind(theta):
     """

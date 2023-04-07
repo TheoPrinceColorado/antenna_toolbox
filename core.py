@@ -957,7 +957,7 @@ class pattern():
         :param radiation_efficiency: Value of the radiation efficiency (i.e. 0.69)
         :type radiation_efficiency: number
         """
-        temp = self[directivity_field] + math_funcs.mag2dB(radiation_efficiency)
+        temp = self[directivity_field] + math_funcs.power_2_db(radiation_efficiency)
         temp.data_array.coords['field'] = [gain_field]
         self._concat_in_place(temp, 'field')
 
@@ -1013,7 +1013,7 @@ class pattern():
         :param radiation_efficiency: Value of the radiation efficiency (i.e. 0.69)
         :type radiation_efficiency: number
         """
-        temp = self[directivity_field] + math_funcs.mag2dB(mismatch_efficiency) + math_funcs.mag2dB(radiation_efficiency)
+        temp = self[directivity_field] + math_funcs.power_2_dB(mismatch_efficiency) + math_funcs.power_2_dB(radiation_efficiency)
         temp.data_array.coords['field'] = [gain_field]
         self._concat_in_place(temp, 'field')
 
@@ -1190,7 +1190,7 @@ class pattern():
             :return: aperture efficiency / %
             :rtype: 1D numpy array
             """
-            return math_funcs.db_2_mag(pat_value) / \
+            return math_funcs.db_2_power(pat_value) / \
                    (4 * np.pi * area_arg / (electromagnetics.wavelength(self.data_array.frequency.values) ** 2)) * 100
 
         # compute aperture efficiency using peak finding or NOT using peak finding
