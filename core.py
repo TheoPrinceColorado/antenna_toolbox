@@ -1053,69 +1053,49 @@ class pattern():
         """
         self._compute_realized_gain('Directivity_L3Y', 'Realized_Gain_L3Y', mismatch_efficiency, radiation_efficiency)
 
-    def find_global_extrema(self, field, coord, extrema_type, **kwargs):
+    def find_extrema(self, field):
         """
-        Finds the maximum of a data field for every coordinate. Saves data as a DataArray that is an attribute of
-        pattern.data_array with the following naming convention: <extrema_type>_<field>_vs_<coord>. Ex: Find maximum
-        Directivity_L3Y vs frequency, then the data is stored as pattern.data_array.max_Directivity_L3Y_vs_frequency.
-        
-        Coordinates for the maximum data are saved as <extrema_type>_<field>_vs_<coord>_<remaining_coord_0> and 
-        <extrema_type>_<field>_vs_<coord>_<remaining_coord_1>.
-        
-        All data is saved as a numpy array, which goes along the 'coord' argument.
+        This function finds the global minimum and maximum value in the theta and phi space of a field
+        These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
+            i.e. accessing pattern_object.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
 
-        Essentially a wrapper around xarray.DataArray.max
-        (http://xarray.pydata.org/en/stable/generated/xarray.DataArray.max.html)
-
-        :param field: field in data_array to search for abs max or min in
-        :type field: string
-
-        :param coord: coordinate along which abs max or min is searched for (ex: frequency)
-        :type coord: string
-
-        :param extrema_type: 'max' or 'min' depending on if max or minimum data is desired
-        :type extrema_type: string
-
-        :param **save_name: string to save the name of the calculation as something other than
-        '<extrema_type>_<field>_vs_<coord>'
-        :type **save_name: string
+        :param field: field name to find the extrema in 
+        :type field: str
         """
+        self.find_min(field)
+        self.find_max(field)
+        
+    def find_min(self, field):
+        """
+        This function finds the global minimum value in the theta and phi space of a field
+        These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
+            i.e. accessing pattern_object.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
 
-        # generate save name
-        sep = '_'  # I simply did not feel like typing a bunch of underscores and quotes
-        vs = 'vs'  # more lazy codeeeeeee
-        save_name = extrema_type + sep + field + sep + vs + sep + coord
+        :param field: field name to find the extrema in 
+        :type field: str
+        """
+        maximum_versus_frequency = self.self.data_array.loc[field].min(['theta', 'phi']).to_numpy()
+        attr_name = 'Min_' + field
+        setattr(self, attr_name, maximum_versus_frequency)        
 
-        # handle kwargs
-        for key in kwargs.keys():
-            if key == 'save_name':
-                save_name = kwargs[key]
+    def find_peak(self, field):
+        """
+        Wrapper for find_max
+        """
+        self.find_max(field)
 
-        # error handling
-        if not _check_field_in_valid_fields(field):
-            raise ValueError('field is not in pattern.VALID_FIELD_NAMES.')
-        if coord not in self.DEFAULT_DIMS:
-            raise ValueError('coord is not in pattern.DEFAULT_DIMS.')
-        else:
-            if coord == 'field':
-                raise ValueError("coord must be 'theta', 'phi', or 'frequency'.")
-        if extrema_type != 'max' or extrema_type != 'min':
-            raise ValueError("extrema_type is not in 'max' or 'min'.")
+    def find_max(self, field):
+        """
+        This function finds the global maximum value in the theta and phi space of a field
+        These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
+            i.e. accessing pattern_object.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
 
-        # get coordinates that are NOT the coordinate to search for max/min along
-        remaining_coords = ['frequency', 'theta', 'phi']
-        remaining_coords.remove(coord)
-
-        # find maximum or minimum vs coord
-        arg = None
-        if extrema_type == 'max':
-            self.data_array.attrs[save_name] = self.data_array.loc[field].max(remaining_coords).to_numpy()
-            arg = self.data_array.loc[field].argmax(remaining_coords)
-        elif extrema_type == 'min':
-            self.data_array.attrs[save_name] = self.data_array.loc[field].min(remaining_coords).to_numpy()
-            arg = self.data_array.loc[field].argmin(remaining_coords)
-        self.data_array.attrs[save_name + '_' + remaining_coords[0]] = self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy()
-        self.data_array.attrs[save_name + '_' + remaining_coords[1]] = self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy()
+        :param field: field name to find the extrema in 
+        :type field: str
+        """
+        maximum_versus_frequency = self.self.data_array.loc[field].max(['theta', 'phi']).to_numpy()
+        attr_name = 'Max_' + field
+        setattr(self, attr_name, maximum_versus_frequency)
 
     def calc_aperture_efficiency(self, pattern_type, area, **kwargs):
         """
