@@ -598,10 +598,10 @@ class pattern():
         :type field_str_array: array of strings
         """
 
-        self.compute_ERHCP() if 'ERHCP' in field_str_array else None
-        self.compute_ELHCP() if 'ELHCP' in field_str_array else None
-        self.compute_Ephi() if 'Ephi' in field_str_array else None
-        self.compute_Etheta() if 'Etheta' in field_str_array else None
+        self.compute_ERHCP_from_Etheta_Ephi() if 'ERHCP' in field_str_array else None
+        self.compute_ELHCP_from_Etheta_Ephi() if 'ELHCP' in field_str_array else None
+        self.compute_Ephi_from_ERHCP_ELHCP() if 'Ephi' in field_str_array else None
+        self.compute_Etheta_from_ERHCP_ELHCP() if 'Etheta' in field_str_array else None
         
         self.compute_EL3X_from_Etheta_Ephi() if 'E3X' in field_str_array else None
         self.compute_EL3Y_from_Ethet_Ephi() if 'E3Y' in field_str_array else None
@@ -631,7 +631,7 @@ class pattern():
         field.coords['field'] = [field_name]
         self.data_array = xr.concat( [self.data_array, field], dim='field')
 
-    def compute_ERHCP(self):
+    def compute_ERHCP_from_Etheta_Ephi(self):
         """
         Computes the ERHCP in place from Ephi and Etheta
         """
@@ -639,7 +639,7 @@ class pattern():
             - 1j * self.data_array.loc[dict(field='Etheta')])
         self._append_field(temp, 'ERHCP')
 
-    def compute_ELHCP(self):
+    def compute_ELHCP_from_Etheta_Ephi(self):
         """
         Computes the ELHCP in place from Ephi and Etheta
         """
@@ -647,7 +647,7 @@ class pattern():
             + 1j * self.data_array.loc[dict(field='Etheta')])
         self._append_field(temp, 'ELHCP')
 
-    def compute_Etheta(self):
+    def compute_Etheta_from_ERHCP_ELHCP(self):
         """
         Computes Etheta in place from ERHCP and ELHCP
         """
@@ -655,7 +655,7 @@ class pattern():
             - self.data_array.loc[dict(field='ELHCP')])
         self._append_field(temp, 'Etheta')
 
-    def compute_Ephi(self):
+    def compute_Ephi_from_ERHCP_ELHCP(self):
         """
         Computes Ephi in place from ERHCP and ELHCP
         """
@@ -1040,37 +1040,37 @@ class pattern():
         temp.data_array.coords['field'] = [gain_field]
         self._concat_in_place(temp, 'field')
 
-    def compute_gain_phi(self, mismatch_efficiency, radiation_efficiency):
+    def compute_realized_gain_phi(self, mismatch_efficiency, radiation_efficiency):
         """
         See _compute_realized_gain
         """
         self._compute_realized_gain('Directivity_Phi', 'Realized_Gain_Phi', mismatch_efficiency, radiation_efficiency)
 
-    def compute_gain_theta(self, mismatch_efficiency, radiation_efficiency):
+    def compute_realized_gain_theta(self, mismatch_efficiency, radiation_efficiency):
         """
         See _compute_realized_gain
         """
         self._compute_realized_gain('Directivity_Theta', 'Realized_Gain_Theta', mismatch_efficiency, radiation_efficiency)
 
-    def compute_gain_LHCP(self, mismatch_efficiency, radiation_efficiency):
+    def compute_realized_gain_LHCP(self, mismatch_efficiency, radiation_efficiency):
         """
         See _compute_realized_gain
         """
         self._compute_realized_gain('Directivity_LHCP', 'Realized_Gain_LHCP', mismatch_efficiency, radiation_efficiency)
 
-    def compute_gain_RHCP(self, mismatch_efficiency, radiation_efficiency):
+    def compute_realized_gain_RHCP(self, mismatch_efficiency, radiation_efficiency):
         """
         See _compute_realized_gain
         """
         self._compute_realized_gain('Directivity_RHCP', 'Realized_Gain_RHCP', mismatch_efficiency, radiation_efficiency)
 
-    def compute_gain_L3X(self, mismatch_efficiency, radiation_efficiency):
+    def compute_realized_gain_L3X(self, mismatch_efficiency, radiation_efficiency):
         """
         See _compute_realized_gain
         """
         self._compute_realized_gain('Directivity_L3X', 'Realized_Gain_L3X', mismatch_efficiency, radiation_efficiency)
 
-    def compute_gain_L3Y(self, mismatch_efficiency, radiation_efficiency):
+    def compute_realized_gain_L3Y(self, mismatch_efficiency, radiation_efficiency):
         """
         See _compute_realized_gain
         """
