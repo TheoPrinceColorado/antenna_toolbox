@@ -1036,7 +1036,7 @@ class pattern():
         :param radiation_efficiency: Value of the radiation efficiency (i.e. 0.69)
         :type radiation_efficiency: number
         """
-        temp = self[directivity_field] + math_funcs.power_2_dB(mismatch_efficiency) + math_funcs.power_2_dB(radiation_efficiency)
+        temp = self[directivity_field] + math_funcs.power_2_db(mismatch_efficiency) + math_funcs.power_2_db(radiation_efficiency)
         temp.data_array.coords['field'] = [gain_field]
         self._concat_in_place(temp, 'field')
 
@@ -1105,7 +1105,9 @@ class pattern():
         :return: The minimum
         :rtype: 1 D numpy array versus frequency 
         """
-        minimum_versus_frequency = self.self.data_array.loc[field].min(['theta', 'phi']).to_numpy()
+        minimum_versus_frequency = self.data_array.loc[dict(field=field)].min(['theta', 'phi']).value.to_numpy()
+        if field in pattern.FIELDS_WITH_UNITS_DB:
+            minimum_versus_frequency = np.real(minimum_versus_frequency)
         attr_name = 'Min_' + field
         setattr(self.attrs, attr_name, minimum_versus_frequency)
 
@@ -1129,7 +1131,9 @@ class pattern():
         :return: The maximum
         :rtype: 1 D numpy array versus frequency
         """
-        maximum_versus_frequency = self.self.data_array.loc[field].max(['theta', 'phi']).to_numpy()
+        maximum_versus_frequency = self.data_array.loc[dict(field=field)].max(['theta', 'phi']).value.to_numpy()
+        if field in pattern.FIELDS_WITH_UNITS_DB:
+            maximum_versus_frequency = np.real(maximum_versus_frequency)
         attr_name = 'Max_' + field
         setattr(self.attrs, attr_name, maximum_versus_frequency)
 
@@ -1192,11 +1196,11 @@ class pattern():
         # find maximum or minimum vs coord
         arg = None
         if extrema_type == 'max':
-            setattr(self.attrs, save_name, self.data_array.loc[field].max(remaining_coords).to_numpy())
-            arg = self.data_array.loc[field].argmax(remaining_coords)
+            setattr(self.attrs, save_name, self.data_array.loc[dict(field=field)].max(remaining_coords).value.to_numpy())
+            arg = self.data_array.loc[dict(field=field)].argmax(remaining_coords)
         elif extrema_type == 'min':
-            setattr(self.attrs, save_name, self.data_array.loc[field].min(remaining_coords).to_numpy())
-            arg = self.data_array.loc[field].argmin(remaining_coords)
+            setattr(self.attrs, save_name, self.data_array.loc[dict(field=field)].min(remaining_coords).value.to_numpy())
+            arg = self.data_array.loc[dict(field=field)].argmin(remaining_coords)
         setattr(self.attrs, save_name + '_' + remaining_coords[0], self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy())
         setattr(self.attrs, save_name + '_' + remaining_coords[1], self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy())
 
