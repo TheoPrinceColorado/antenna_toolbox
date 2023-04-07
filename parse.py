@@ -820,3 +820,43 @@ def read_csv(file_name, data_dict, coord_dict=['field', 'frequency', 'theta', 'p
     data_array = df.to_xarray()
 
     return core.pattern(data_array=data_array)
+
+def read_arg_chamber_pattern_data(file_name, linear_or_circular=True):
+    """
+    Loads arg chamber data
+
+    :param file_name: file name of the csv output file from the arg chamber
+    :type file_name: str
+    :param linear_or_circular: if true the arg chamber data is linear (Etheta and Ephi) 
+        otherwise the data is loaded assuming (Etheta=ERHCP and Ephi=ELHCP), defaults to True
+    :type linear_or_circular: bool, optional
+    :return: Pattern object with the arg chamber data in it
+    :rtype: antenna_toolbox.pattern
+    """
+
+    coord_dict = {'#':'frequency', 'Phi': 'phi', 'Theta':'theta',}
+
+    df = pd.read_csv(file_name, sep='\s+')
+
+    df = df.rename(coord_dict, axis='columns')
+
+    if linear_or_circular: # in the case linear is set
+        df['Etheta'] = 10**(df['dB(Etheta)'] / 20) * np.e**(1j*np.pi*df['Phase(Etheta)']/180)
+        df['Ephi'] = 10**(df['dB(Ephi)'] / 20) * np.e**(1j*np.pi*df['Phase(Ephi)']/180)
+
+        field_names = ['Etheta', 'Ephi']
+    else: # in the case circular is set
+        df['ERHCP'] = 10**(df['dB(Etheta)'] / 20) * np.e**(1j*np.pi*df['Phase(Etheta)']/180)
+        df['ELHCP'] = 10**(df['dB(Ephi)'] / 20) * np.e**(1j*np.pi*df['Phase(Ephi)']/180)
+    
+        field_names = ['ERHCP', 'ELHCP']
+    other_coord_names = list(coord_dict.values())
+
+    df = df[field_names + other_coord_names].copy()
+    df = df.melt(id_vars=other_coord_names, value_vars=field_names, var_name='field')
+
+    df = df.set_index(['field'] + other_coord_names)
+
+    data_array = df.to_xarray()
+
+    return core.pattern(data_array=data_array)
