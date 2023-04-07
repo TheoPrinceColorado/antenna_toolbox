@@ -25,14 +25,20 @@ class pattern():
         'Ephi',
         'ERHCP',
         'ELHCP',
+        'EL3X',
+        'EL3Y'
         'Htheta',
         'Hphi',
         'HRHCP',
         'HLHCP',
+        'HL3X',
+        'HL3Y',
         'Utheta',
         'Uphi',
         'URHCP',
         'ULHCP',
+        'UL3X',
+        'UL3Y'
         'Directivity_Theta',
         'Directivity_Phi',
         'Directivity_Total',
@@ -54,6 +60,8 @@ class pattern():
         'Realized_Gain_L3Y',
         'Realized_Gain_LHCP',
         'Realized_Gain_RHCP',
+        'Xpol_Ratio_Theta_to_Phi',
+        'Xpol_Ratio_Phi_to_Theta',
         'Xpol_Ratio_Y_to_X',
         'Xpol_Ratio_X_to_Y',
         'Xpol_Ratio_LH_to_RH',
@@ -77,14 +85,20 @@ class pattern():
         'Ephi': E_FIELD_UNITS,
         'ERHCP': E_FIELD_UNITS,
         'ELHCP': E_FIELD_UNITS,
+        'EL3X': E_FIELD_UNITS,
+        'EL3Y': E_FIELD_UNITS,
         'Htheta': H_FIELD_UNITS,
         'Hphi': H_FIELD_UNITS,
         'HRHCP': H_FIELD_UNITS,
         'HLHCP': H_FIELD_UNITS,
+        'HL3X': H_FIELD_UNITS,
+        'HL3Y': H_FIELD_UNITS,
         'Utheta': POWER_FIELD_UNITS,
         'Uphi': POWER_FIELD_UNITS,
         'URHCP': POWER_FIELD_UNITS,
         'ULHCP': POWER_FIELD_UNITS,
+        'UL3X': POWER_FIELD_UNITS,
+        'UL3Y': POWER_FIELD_UNITS,
         'Directivity_Theta': 'dBi',
         'Directivity_Phi': 'dBi',
         'Directivity_Total': 'dBi',
@@ -106,6 +120,8 @@ class pattern():
         'Realized_Gain_L3Y': 'dBi',
         'Realized_Gain_LHCP': 'dBic',
         'Realized_Gain_RHCP': 'dBic',
+        'Xpol_Ratio_Theta_to_Phi':'dB',
+        'Xpol_Ratio_Phi_to_Theta':'dB',
         'Xpol_Ratio_Y_to_X': 'dB',
         'Xpol_Ratio_X_to_Y': 'dB',
         'Xpol_Ratio_LH_to_RH': 'dB',
@@ -564,8 +580,8 @@ class pattern():
         self.compute_Ephi() if 'Ephi' in field_str_array else None
         self.compute_Etheta() if 'Etheta' in field_str_array else None
         
-        self.compute_EL3X_from_linear_E() if 'E3X' in field_str_array else None
-        self.compute_EL3Y_from_linear_E() if 'E3Y' in field_str_array else None
+        self.compute_EL3X_from_Etheta_Ephi() if 'E3X' in field_str_array else None
+        self.compute_EL3Y_from_Ethet_Ephi() if 'E3Y' in field_str_array else None
 
         # I'm not 100% sure it makes sense to just use these functions automatically 
         # since the success of these functions is predicated on other fields existing
@@ -624,7 +640,7 @@ class pattern():
             + self.data_array.loc[dict(field='ELHCP')])
         self._append_field(temp, 'Ephi')
 
-    def compute_EL3X_from_linear_E(self):
+    def compute_EL3X_from_Etheta_Ephi(self):
         """
         Computes L3X fields in place based on Ludwig's 3rd definition [1]
 
@@ -636,7 +652,7 @@ class pattern():
             - self.data_array.loc[dict(field='Ephi')] * np.sin(np.deg2rad(self.data_array.coords['phi']))
         self._append_field(temp, 'EL3X')
 
-    def compute_EL3Y_from_linear_E(self):
+    def compute_EL3Y_from_Ethet_Ephi(self):
         """
         Computes L3Y fields in place based on Ludwig's 3rd definition [1]
 
@@ -697,10 +713,88 @@ class pattern():
         """
         self._compute_U_from_E('UL3Y', 'EL3Y')
 
-    #TODO compute polarization_angle
-    #TODO compute axial ratio
-    #TODO compute Xpol ratios
+    def _compute_Xpol_ratio_from_E(self, field_1, field_2, output_field):
+        """Computes Xpol ratio of two E fields
 
+        :param field_1: Efield
+        :type field_1: str
+        :param field_2: Efield
+        :type field_2: str
+        :param output_field: Xpol ratio field name
+        :type output_field: str
+        """
+        temp = self.data_array.loc[dict(field=field_1)] / self.data_array.loc[dict(field=field_2)]
+        self._append_field(temp, output_field)
+        self._convert_power_field_to_dB(self, output_field)
+        
+    def compute_Xpol_Etheta_to_Ephi(self):
+        self._compute_Xpol_ratio_from_E('Etheta', 'Ephi', 'Xpol_Ratio_Theta_to_Phi')
+
+    def compute_Xpol_Ephi_to_Etheta(self):
+        self._compute_Xpol_ratio_from_E('Ephi', 'Etheta', 'Xpol_Ratio_Phi_to_Theta')
+        
+    def compute_Xpol_LHCP_to_RHCP(self):
+        self._compute_Xpol_ratio_from_E('ELHCP', 'ERHCP', 'Xpol_Ratio_LH_to_RH')
+
+    def compute_Xpol_ERHCP_to_ELHCP(self):
+        self._compute_Xpol_ratio_from_E('ERHCP', 'ELHCP', 'Xpol_Ratio_RH_to_LH')
+
+    def compute_Xpol_EL3X_to_EL3Y(self):
+        self._compute_Xpol_ratio_from_E('EL3X', 'EL3Y', 'Xpol_Ratio_X_to_Y')
+
+    def compute_Xpol_EL3Y_to_EL3X(self):
+        self._compute_Xpol_ratio_from_E('EL3Y', 'EL3X', 'Xpol_Ratio_Y_to_X')
+
+    def compute_polarization_angle_from_EL3X_EL3Y(self):
+        """
+        Compute polarization angle in deg from EL3X and EL3Y in place
+        """
+        E_L3X = self.data_array.loc[dict(field='EL3X')]
+        E_L3Y = self.data_array.loc[dict(field='EL3Y')]
+
+        delta_phi = np.angle(E_L3Y) - np.angle(E_L3X)
+        exo = np.abs(E_L3X)
+        eyo = np.abs(E_L3Y)
+
+        polarization_angle = np.rad2deg(np.pi/2 - 0.5*np.arctan2(2*exo*eyo * np.cos(delta_phi)
+            , (exo**2 - eyo**2) * np.cos(delta_phi)))
+
+        self._append_field(polarization_angle, 'Polarization_Angle')
+
+    def compute_axial_ratio_from_EL3X_EL3Y(self):
+        """
+        Compute axial ratio in dB from the e fields EL3X and EL3Y in place
+        Defined as major axis over minor axis
+        """
+        E_L3X = self.data_array.loc[dict(field='EL3X')]
+        E_L3Y = self.data_array.loc[dict(field='EL3Y')]
+
+        delta_phi = np.angle(E_L3Y) - np.angle(E_L3X)
+        exo = np.abs(E_L3X)
+        eyo = np.abs(E_L3Y)
+        term1 = exo**2 + eyo**2
+        term2 = np.sqrt(exo**4 + eyo**4 + 2*(exo**2)*(eyo**2)*np.cos(2*delta_phi))
+        oa = np.sqrt(0.5 * (term1 + term2))
+        ob = np.sqrt(0.5 * (term1 - term2))
+        
+        AR = oa / ob
+
+        self._append_field(AR, 'Axial_Ratio')
+        self._convert_voltage_field_to_dB('Axial_Ratio')
+
+    def compute_tilt_angle_from_EL3X_EL3Y(self):
+        """
+        Compute tilt angle in deg ferom the e fields EL3X and EL3Y in place
+        """
+        E_L3X = self.data_array.loc[dict(field='EL3X')]
+        E_L3Y = self.data_array.loc[dict(field='EL3Y')]
+        delta_phi = np.angle(E_L3Y) - np.angle(E_L3X)
+
+        term1 = np.abs(E_L3X)**2 - np.abs(E_L3Y)**2
+
+        tilt_angle = 0.5 * np.arctan2(np.cos(delta_phi) * (2 * E_L3X * E_L3Y) / term1)
+
+        
     def _integrate_field_over_phi_theta(self, field, frequency, method='simpson'):
         """
         Integrates a field over phi and theta using the approximation 'method'
@@ -727,9 +821,9 @@ class pattern():
 
         return result
 
-    def compute_total_power(self, field, frequency, method='simpson'):
+    def compute_radiated_power(self, field, frequency, method='simpson'):
         """
-        Computes the total power of the passed field at a particular frequency
+        Computes the radiated power of the passed field at a particular frequency
 
         Sources:
             [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
@@ -754,7 +848,25 @@ class pattern():
         :param field: power field
         :type field: str
         """
-        self.data_array.loc[dict(field=field)] = math_funcs.mag_2_db(self.data_array.loc[dict(field=field)])
+        self.data_array.loc[dict(field=field)] = math_funcs.power_2_db(self.data_array.loc[dict(field=field)])
+
+    def _convert_voltage_field_to_dB(self, field):
+        """
+        Converts a real unit voltage field to dB in place
+
+        :param field: voltage field
+        :type field: str
+        """
+        self.data_array.loc[dict(field=field)] = math_funcs.voltage_2_db(self.data_array.loc[dict(field=field)])
+
+    def _convert_amperage_field_to_dB(self, field):
+        """
+        Converts a real unit amperage field to dB in place
+
+        :param field: amperage field
+        :type field: str
+        """
+        self.data_array.loc[dict(field=field)] = math_funcs.amperage_2_db(self.data_array.loc[dict(field=field)])
 
     def _compute_directivity_at_f(self, field, frequency, directivity_field_name, method='simpson'):
         """
@@ -833,7 +945,7 @@ class pattern():
 
     def _compute_gain(self, directivity_field, gain_field, radiation_efficiency):
         """
-        Computes gain from the directivity, and radiation efficiency
+        Computes gain from the directivity, and radiation efficiency in place
 
         Sources:
             [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
