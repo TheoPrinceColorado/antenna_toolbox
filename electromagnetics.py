@@ -3,26 +3,7 @@ Contains functions related to electromagnetic principles/quantities
 """
 
 import numpy as np
-from scipy import constants
-
-
-def free_space_eps_mu():
-    """
-
-    :return: permittivity and permeability of free space, respectively
-    :rtype: tuple of floats
-    """
-    return constants.epsilon_0, constants.mu_0
-
-
-def free_space_impedance():
-    """
-    
-    :return: impedance of free space
-    :rtype: float
-    """
-    return 1 / (constants.epsilon_0 * constants.speed_of_light)
-
+from antenna_toolbox import constants
 
 def phase_constant(frequency, ep_r_prime, sigma, mu_r_prime):
     """
@@ -38,7 +19,8 @@ def phase_constant(frequency, ep_r_prime, sigma, mu_r_prime):
     """
 
     # grab constants
-    ep_0, mu_0 = free_space_eps_mu()
+    ep_0 = constants.epsilon_0
+    mu_0 = constants.mu_0
 
     # compute omega [rad/s]
     w = 2 * np.pi * frequency
@@ -62,7 +44,8 @@ def attenuation_constant(frequency, ep_r_prime, sigma, mu_r_prime):
     """
 
     # grab constants
-    ep_0, mu_0 = free_space_eps_mu()
+    ep_0 = constants.epsilon_0
+    mu_0 = constants.mu_0
 
     # compute omega [rad/m]
     w = 2 * np.pi * frequency
@@ -86,7 +69,8 @@ def wave_impedance(frequency, ep_r_prime, sigma=0, mu_r_prime=1):
     """
 
     # grab constants
-    ep_0, mu_0 = free_space_eps_mu()
+    ep_0 = constants.epsilon_0
+    mu_0 = constants.mu_0
 
     # compute omega [rad/s]
     w = 2 * np.pi * frequency
@@ -115,7 +99,8 @@ def wavelength(frequency, ep_r_prime=1, ep_r_2prime=0, mu_r_prime=1):
     """
 
     # grab constants
-    ep_0, mu_0 = free_space_eps_mu()
+    ep_0 = constants.epsilon_0
+    mu_0 = constants.mu_0
 
     # compute omega [rad/s]
     w = 2 * np.pi * frequency
@@ -145,7 +130,8 @@ def wave_velocity(frequency, ep_r_prime, ep_r_2prime=0, mu_r_prime=1):
     """
 
     # grab constants
-    ep_0, mu_0 = free_space_eps_mu()
+    ep_0 = constants.epsilon_0
+    mu_0 = constants.mu_0
 
     # compute omega [rad/s]
     w = 2 * np.pi * frequency

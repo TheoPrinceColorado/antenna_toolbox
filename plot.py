@@ -53,6 +53,9 @@ def polar_phi_cut(pattern_object, field_names, frequency, phi, field_labels=None
         theta = data_array_cut.coords['theta'].values*np.pi/180.0
         data =  data_array_cut.value
 
+        if field in pattern_object.FIELDS_WITH_UNITS_DB:
+            data = np.real(data)
+
         if field_labels is None:
             plt.polar(theta, data, label=field)
         else:
@@ -93,6 +96,9 @@ def polar_theta_cut(pattern_object, field_names, frequency, theta, field_labels=
         phi = data_array_cut.coords['phi'].values*np.pi/180.0
         data =  data_array_cut.value
 
+        if field in pattern_object.FIELDS_WITH_UNITS_DB:
+            data = np.real(data)
+
         if field_labels is None:
             plt.polar(phi, data, label=field)
         else:
@@ -127,6 +133,9 @@ def rect_phi_cut(pattern_object, field_names, frequency, phi, field_labels=None)
         data_array_cut = data_array.sel(field=field, frequency=frequency, phi=phi)
         theta = data_array_cut.coords['theta'].values*np.pi/180
         data =  data_array_cut.value
+
+        if field in pattern_object.FIELDS_WITH_UNITS_DB:
+            data = np.real(data)
 
         if field_labels is None:
             plt.plot(theta, data, label=field)
@@ -165,6 +174,9 @@ def rect_theta_cut(pattern_object, field_names, frequency, theta, field_labels=N
         data_array_cut = data_array.sel(field=field, frequency=frequency, theta=theta)
         phi = data_array_cut.coords['phi'].values*np.pi/180.0
         data =  data_array_cut.value
+
+        if field in pattern_object.FIELDS_WITH_UNITS_DB:
+            data = np.real(data)
 
         if field_labels is None:
             plt.plot(phi, data, label=field)

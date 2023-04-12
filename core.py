@@ -1,12 +1,14 @@
 import xarray as xr
 import pandas as pd
 import numpy as np
+import scipy as sp
 import warnings
 import copy
 from os.path import splitext
 from antenna_toolbox import electromagnetics
 from antenna_toolbox import math_funcs
 from antenna_toolbox import parse
+from antenna_toolbox import constants
 
 def _get_keys_whose_values_contain_string(dictionary, search_string):
     found_keys = []
@@ -23,14 +25,20 @@ class pattern():
         'Ephi',
         'ERHCP',
         'ELHCP',
-        'Re_Etheta',
-        'Im_Etheta',
-        'Re_Ephi',
-        'Im_Ephi',
-        'Re_Htheta',
-        'Im_Htheta',
-        'Re_Hphi',
-        'Im_Hphi',
+        'EL3X',
+        'EL3Y'
+        'Htheta',
+        'Hphi',
+        'HRHCP',
+        'HLHCP',
+        'HL3X',
+        'HL3Y',
+        'Utheta',
+        'Uphi',
+        'URHCP',
+        'ULHCP',
+        'UL3X',
+        'UL3Y'
         'Directivity_Theta',
         'Directivity_Phi',
         'Directivity_Total',
@@ -52,6 +60,8 @@ class pattern():
         'Realized_Gain_L3Y',
         'Realized_Gain_LHCP',
         'Realized_Gain_RHCP',
+        'Xpol_Ratio_Theta_to_Phi',
+        'Xpol_Ratio_Phi_to_Theta',
         'Xpol_Ratio_Y_to_X',
         'Xpol_Ratio_X_to_Y',
         'Xpol_Ratio_LH_to_RH',
@@ -60,20 +70,35 @@ class pattern():
         'Polarization_Angle'
     ]
 
+    ANGLE_UNITS = 'deg'
+    E_FIELD_UNITS = 'V/m'
+    H_FIELD_UNITS = 'A/m'
+    POWER_FIELD_UNITS = 'W/m**2'
+
     DEFAULT_UNITS = {
         'Frequency': 'Hz',
-        'Theta': 'deg',
-        'Phi': 'deg',
-        'Elevation': 'deg',
-        'Azimuth': 'deg',
-        'Re_Etheta': 'V/m',
-        'Im_Etheta': 'V/m',
-        'Re_Ephi': 'V/m',
-        'Im_Ephi': 'V/m',
-        'Re_Htheta': 'A/m',
-        'Im_Htheta': 'A/m',
-        'Re_Hphi': 'A/m',
-        'Im_Hphi': 'A/m',
+        'Theta': ANGLE_UNITS,
+        'Phi': ANGLE_UNITS,
+        'Elevation': ANGLE_UNITS,
+        'Azimuth': ANGLE_UNITS,
+        'Etheta': E_FIELD_UNITS,
+        'Ephi': E_FIELD_UNITS,
+        'ERHCP': E_FIELD_UNITS,
+        'ELHCP': E_FIELD_UNITS,
+        'EL3X': E_FIELD_UNITS,
+        'EL3Y': E_FIELD_UNITS,
+        'Htheta': H_FIELD_UNITS,
+        'Hphi': H_FIELD_UNITS,
+        'HRHCP': H_FIELD_UNITS,
+        'HLHCP': H_FIELD_UNITS,
+        'HL3X': H_FIELD_UNITS,
+        'HL3Y': H_FIELD_UNITS,
+        'Utheta': POWER_FIELD_UNITS,
+        'Uphi': POWER_FIELD_UNITS,
+        'URHCP': POWER_FIELD_UNITS,
+        'ULHCP': POWER_FIELD_UNITS,
+        'UL3X': POWER_FIELD_UNITS,
+        'UL3Y': POWER_FIELD_UNITS,
         'Directivity_Theta': 'dBi',
         'Directivity_Phi': 'dBi',
         'Directivity_Total': 'dBi',
@@ -95,6 +120,8 @@ class pattern():
         'Realized_Gain_L3Y': 'dBi',
         'Realized_Gain_LHCP': 'dBic',
         'Realized_Gain_RHCP': 'dBic',
+        'Xpol_Ratio_Theta_to_Phi':'dB',
+        'Xpol_Ratio_Phi_to_Theta':'dB',
         'Xpol_Ratio_Y_to_X': 'dB',
         'Xpol_Ratio_X_to_Y': 'dB',
         'Xpol_Ratio_LH_to_RH': 'dB',
@@ -105,9 +132,10 @@ class pattern():
 
     FIELDS_WITH_UNITS_DB =  _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'dB')
 
-    REAL_UNITS = ['V/m', 'A/m']
-    FIELD_WITH_REAL_UNITS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'V/m') \
-        + _get_keys_whose_values_contain_string(DEFAULT_UNITS, 'A/m')
+    REAL_UNITS = [E_FIELD_UNITS, H_FIELD_UNITS]
+    FIELD_WITH_REAL_UNITS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, E_FIELD_UNITS) \
+        + _get_keys_whose_values_contain_string(DEFAULT_UNITS, H_FIELD_UNITS)
+    POWER_FIELDS = _get_keys_whose_values_contain_string(DEFAULT_UNITS, POWER_FIELD_UNITS)
 
     FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV = FIELD_WITH_REAL_UNITS
     FIELDS_UNSAFE_FOR_ADD_SUB_MUL_DIV = _remove_all_list_elements_in_l2_from_l1(DEFAULT_UNITS, FIELDS_SAFE_FOR_ADD_SUB_MUL_DIV)
@@ -115,6 +143,23 @@ class pattern():
     DEFAULT_DIMS = ['field', 'frequency', 'theta', 'phi']
 
     SUPPORTED_FILE_TYPES = ['.ffs', '.ffe', '.nc', '.csv']
+
+    class _attrs():
+        def __init__(self):
+            pass
+
+        def __getitem__(self, key):
+            """
+            Implement indexing
+            """
+
+            return getattr(self, key)
+
+        def __setitem__(self, key, value):
+            """
+            Implement assignment indexing
+            """
+            return setattr(self, key, value)
 
     def _get_coords_as_list(self, coord):
         return list(self.data_array.coords[coord].values)
@@ -212,8 +257,14 @@ class pattern():
                 kwarg_fields[key] = value
             elif key in pattern.DEFAULT_DIMS:
                 kwarg_coords[key] = value
+            elif key == 'attrs':
+                self.attrs = value
             else:
                 raise ValueError("Passed kwarg is not a support field or a recognized argument. " + str(key))
+
+        # if no attributes are passed then create an empty attributes object
+        if not hasattr(self, 'attrs'):
+            self.attrs = pattern._attrs()
 
         # if kwargs passed with field names, combine all of the field data into one
         if len(kwarg_fields) > 0:
@@ -294,6 +345,21 @@ class pattern():
     def __repr__(self):
         return self.data_array.__repr__()
 
+    def _concat_in_place(self, temp, dim):
+        """
+        Concatenates other to the pattern object along the dimension specified 
+        in place version
+
+        :param other: pattern object to concatenate
+        :type other: pattern
+        :param dim: valid field name to concatenate
+        :type dim: str
+
+        :return: 
+        :rtype: pattern
+        """
+        self.data_array = xr.concat([self.data_array, temp.data_array], dim=dim)
+
     def concat(self, other, dim):
         """
         Concatenates other to the pattern object along the dimension specified 
@@ -305,7 +371,7 @@ class pattern():
         :type dim: str
 
         :return: 
-        :rtype: _type_
+        :rtype: pattern
         """
         return pattern(data_array=xr.concat([self.data_array, other.data_array], dim=dim))
 
@@ -380,18 +446,6 @@ class pattern():
             return p
         else:
             raise ValueError('Can only add pattern objects and scalars')
-
-    def _append_field(self, field, field_name):
-        """
-        Appends a field to full data object after a compute is performed
-
-        :param field: a data array with a single unnamed field
-        :type field: xr.data_array
-        :param field_name: name of the field
-        :type field_name: str
-        """
-        field.coords['field'] = [field_name]
-        self.data_array = xr.concat( [self.data_array, field], dim='field')
 
     def __getitem__(self, key):
         """
@@ -536,14 +590,563 @@ class pattern():
         return self.data_array.to_dataframe('value')
 
     # Implement pattern calculation functions
-    def find_global_extrema(self, field, coord, extrema_type, **kwargs):
+    def request_field(self, field_str_array):
+        """
+        Attempts to compute all of the fields listed in the field_str_array in place
+
+        :param field_str_array: valid field names that the user would like to compute
+        :type field_str_array: array of strings
+        """
+
+        self.compute_ERHCP_from_Etheta_Ephi() if 'ERHCP' in field_str_array else None
+        self.compute_ELHCP_from_Etheta_Ephi() if 'ELHCP' in field_str_array else None
+        self.compute_Ephi_from_ERHCP_ELHCP() if 'Ephi' in field_str_array else None
+        self.compute_Etheta_from_ERHCP_ELHCP() if 'Etheta' in field_str_array else None
+        
+        self.compute_EL3X_from_Etheta_Ephi() if 'E3X' in field_str_array else None
+        self.compute_EL3Y_from_Ethet_Ephi() if 'E3Y' in field_str_array else None
+
+        # I'm not 100% sure it makes sense to just use these functions automatically 
+        # since the success of these functions is predicated on other fields existing
+        # , but I can't think of a better way to do it
+        self.compute_Utheta_from_Etheta() if 'Utheta' in field_str_array else None
+        self.compute_Uphi_from_Ephi() if 'Uphi' in field_str_array else None
+        self.compute_URHCP_from_ERHCP() if 'URHCP' in field_str_array else None
+        self.compute_ULHCP_from_ELHCP() if 'ULHCP' in field_str_array else None
+        self.compute_UL3X_from_EL3X() if 'UL3X' in field_str_array else None
+        self.compute_UL3Y_from_EL3Y() if 'UL3Y' in field_str_array else None
+
+        # TODO add directivity, gain and realized gain
+        # Unsure of how to do this because the gain and realized gain method require
+
+    def _append_field(self, field, field_name):
+        """
+        Appends a field to full data object after a compute is performed
+
+        :param field: a data array with a single unnamed field
+        :type field: xr.data_array
+        :param field_name: name of the field
+        :type field_name: str
+        """
+        field.coords['field'] = [field_name]
+        self.data_array = xr.concat( [self.data_array, field], dim='field')
+
+    def compute_ERHCP_from_Etheta_Ephi(self):
+        """
+        Computes the ERHCP in place from Ephi and Etheta
+        """
+        temp =  (1/np.sqrt(2)) * (self.data_array.loc[dict(field='Ephi')] \
+            - 1j * self.data_array.loc[dict(field='Etheta')])
+        self._append_field(temp, 'ERHCP')
+
+    def compute_ELHCP_from_Etheta_Ephi(self):
+        """
+        Computes the ELHCP in place from Ephi and Etheta
+        """
+        temp =  (1/np.sqrt(2)) * (self.data_array.loc[dict(field='Ephi')] \
+            + 1j * self.data_array.loc[dict(field='Etheta')])
+        self._append_field(temp, 'ELHCP')
+
+    def compute_Etheta_from_ERHCP_ELHCP(self):
+        """
+        Computes Etheta in place from ERHCP and ELHCP
+        """
+        temp =  (1j * np.sqrt(2) / 2) * (self.data_array.loc[dict(field='ERHCP')] \
+            - self.data_array.loc[dict(field='ELHCP')])
+        self._append_field(temp, 'Etheta')
+
+    def compute_Ephi_from_ERHCP_ELHCP(self):
+        """
+        Computes Ephi in place from ERHCP and ELHCP
+        """
+        temp =  (np.sqrt(2) / 2) * (self.data_array.loc[dict(field='ERHCP')] \
+            + self.data_array.loc[dict(field='ELHCP')])
+        self._append_field(temp, 'Ephi')
+
+    def compute_EL3X_from_Etheta_Ephi(self):
+        """
+        Computes L3X fields in place based on Ludwig's 3rd definition [1]
+
+        Sources:
+        [1] A. C. Ludwig, “The Definition of Cross Polarization,” IEEE Trans. Antennas Propag., vol. 21, no. 1, pp. 116–119,
+        1973, doi: 10.1109/TAP.1973.1140406.
+        """
+        temp =  self.data_array.loc[dict(field='Etheta')] * np.cos(np.deg2rad(self.data_array.coords['phi'])) \
+            - self.data_array.loc[dict(field='Ephi')] * np.sin(np.deg2rad(self.data_array.coords['phi']))
+        self._append_field(temp, 'EL3X')
+
+    def compute_EL3Y_from_Ethet_Ephi(self):
+        """
+        Computes L3Y fields in place based on Ludwig's 3rd definition [1]
+
+        Sources:
+        [1] A. C. Ludwig, “The Definition of Cross Polarization,” IEEE Trans. Antennas Propag., vol. 21, no. 1, pp. 116–119,
+        1973, doi: 10.1109/TAP.1973.1140406.
+        """
+        temp =  self.data_array.loc[dict(field='Etheta')] * np.sin(np.deg2rad(self.data_array.coords['phi'])) \
+            + self.data_array.loc[dict(field='Ephi')] * np.cos(np.deg2rad(self.data_array.coords['phi']))
+        self._append_field(temp, 'EL3Y')
+
+    def _compute_U_from_E(self, u_field_name, e_field_name):
+        """
+        Computes U (power) from an E field measurement
+
+        :param u_field_name: _description_
+        :type u_field_name: xr.data_array
+        :param e_field_name: _description_
+        :type e_field_name: xr.data_array
+        """
+        temp =  (1 / (2 * constants.Z_0)) \
+            * (np.abs(self.data_array.loc[dict(field=e_field_name)])**2)
+        self._append_field(temp, u_field_name)
+
+    def compute_Utheta_from_Etheta(self):
+        """
+        Computes Utheta in place from Etheta
+        """
+        self._compute_U_from_E('Utheta', 'Etheta')
+
+    def compute_Uphi_from_Ephi(self):
+        """
+        Computes Uphi in place from Ephi
+        """
+        self._compute_U_from_E('Uphi', 'Ephi')
+
+    def compute_URHCP_from_ERHCP(self):
+        """
+        Computes URHCP in place from ERHCP
+        """
+        self._compute_U_from_E('URHCP', 'ERHCP')
+
+    def compute_ULHCP_from_ELHCP(self):
+        """
+        Computes ULHCP in place from ELHCP
+        """
+        self._compute_U_from_E('ULHCP', 'ELHCP')
+
+    def compute_UL3X_from_EL3X(self):
+        """
+        Computes UL3X in place from EL3X
+        """
+        self._compute_U_from_E('UL3X', 'EL3X')
+
+    def compute_UL3Y_from_EL3Y(self):
+        """
+        Computes UL3X in place from EL3X
+        """
+        self._compute_U_from_E('UL3Y', 'EL3Y')
+
+    def _compute_Xpol_ratio_from_E(self, field_1, field_2, output_field):
+        """Computes Xpol ratio of two E fields
+
+        :param field_1: Efield
+        :type field_1: str
+        :param field_2: Efield
+        :type field_2: str
+        :param output_field: Xpol ratio field name
+        :type output_field: str
+        """
+        temp = self.data_array.loc[dict(field=field_1)] / self.data_array.loc[dict(field=field_2)]
+        self._append_field(temp, output_field)
+        self._convert_power_field_to_dB(self, output_field)
+        
+    def compute_Xpol_Etheta_to_Ephi(self):
+        self._compute_Xpol_ratio_from_E('Etheta', 'Ephi', 'Xpol_Ratio_Theta_to_Phi')
+
+    def compute_Xpol_Ephi_to_Etheta(self):
+        self._compute_Xpol_ratio_from_E('Ephi', 'Etheta', 'Xpol_Ratio_Phi_to_Theta')
+        
+    def compute_Xpol_LHCP_to_RHCP(self):
+        self._compute_Xpol_ratio_from_E('ELHCP', 'ERHCP', 'Xpol_Ratio_LH_to_RH')
+
+    def compute_Xpol_ERHCP_to_ELHCP(self):
+        self._compute_Xpol_ratio_from_E('ERHCP', 'ELHCP', 'Xpol_Ratio_RH_to_LH')
+
+    def compute_Xpol_EL3X_to_EL3Y(self):
+        self._compute_Xpol_ratio_from_E('EL3X', 'EL3Y', 'Xpol_Ratio_X_to_Y')
+
+    def compute_Xpol_EL3Y_to_EL3X(self):
+        self._compute_Xpol_ratio_from_E('EL3Y', 'EL3X', 'Xpol_Ratio_Y_to_X')
+
+    def compute_polarization_angle_from_EL3X_EL3Y(self):
+        """
+        Compute polarization angle in deg from EL3X and EL3Y in place
+        """
+        E_L3X = self.data_array.loc[dict(field='EL3X')]
+        E_L3Y = self.data_array.loc[dict(field='EL3Y')]
+
+        delta_phi = np.angle(E_L3Y) - np.angle(E_L3X)
+        exo = np.abs(E_L3X)
+        eyo = np.abs(E_L3Y)
+
+        polarization_angle = np.rad2deg(np.pi/2 - 0.5*np.arctan2(2*exo*eyo * np.cos(delta_phi)
+            , (exo**2 - eyo**2) * np.cos(delta_phi)))
+
+        self._append_field(polarization_angle, 'Polarization_Angle')
+
+    def compute_axial_ratio_from_EL3X_EL3Y(self):
+        """
+        Compute axial ratio in dB from the e fields EL3X and EL3Y in place
+        Defined as major axis over minor axis
+        """
+        E_L3X = self.data_array.loc[dict(field='EL3X')]
+        E_L3Y = self.data_array.loc[dict(field='EL3Y')]
+
+        delta_phi = np.angle(E_L3Y) - np.angle(E_L3X)
+        exo = np.abs(E_L3X)
+        eyo = np.abs(E_L3Y)
+        term1 = exo**2 + eyo**2
+        term2 = np.sqrt(exo**4 + eyo**4 + 2*(exo**2)*(eyo**2)*np.cos(2*delta_phi))
+        oa = np.sqrt(0.5 * (term1 + term2))
+        ob = np.sqrt(0.5 * (term1 - term2))
+        
+        AR = oa / ob
+
+        self._append_field(AR, 'Axial_Ratio')
+        self._convert_voltage_field_to_dB('Axial_Ratio')
+
+    def compute_tilt_angle_from_EL3X_EL3Y(self):
+        """
+        Compute tilt angle in deg ferom the e fields EL3X and EL3Y in place
+        """
+        E_L3X = self.data_array.loc[dict(field='EL3X')]
+        E_L3Y = self.data_array.loc[dict(field='EL3Y')]
+        delta_phi = np.angle(E_L3Y) - np.angle(E_L3X)
+
+        term1 = np.abs(E_L3X)**2 - np.abs(E_L3Y)**2
+
+        tilt_angle = 0.5 * np.arctan2(np.cos(delta_phi) * (2 * E_L3X * E_L3Y) / term1)
+
+        
+    def _integrate_field_over_phi_theta(self, field, frequency, method='simpson'):
+        """
+        Integrates a field over phi and theta using the approximation 'method'
+
+        :param field: a power field
+        :type field: str
+        :param frequency: frequency
+        :type frequency: number
+        :param method: method to use for integration, defaults to 'simpson'
+        :type method: str, optional
+        :raises ValueError: Unsupported method passed
+        :return: the result of the integral
+        :rtype: number
+        """
+        if method == 'simpson':
+            phi_meshgrid, theta_meshgrid = xr.broadcast(
+                self.data_array.coords['phi'], self.data_array.coords['theta'])
+            temp = self.data_array.loc[dict(field=field, frequency=frequency)] \
+                * np.sin(np.deg2rad(np.abs(theta_meshgrid.values)))
+            temp = sp.integrate.simpson(temp.to_array()[0], np.deg2rad(theta_meshgrid))
+            result = sp.integrate.simpson(temp, np.deg2rad(self.data_array.coords['phi']))
+        else:
+            raise ValueError('Method must be simpson (more planned soon)')
+
+        return result
+
+    def compute_radiated_power(self, field, frequency, method='simpson'):
+        """
+        Computes the radiated power of the passed field at a particular frequency
+
+        Sources:
+            [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
+
+        :param field: a power field
+        :type field: str
+        :param frequency: frequency
+        :type frequency: number
+        :param method: method to use for integration, defaults to 'simpson'
+        :type method: str, optional
+        :return: the total powerr in W
+        :rtype: number
+        """
+        if not (field in self.POWER_FIELDS):
+            raise ValueError('Must pass a power field: ' + str(self.POWER_FIELDS))
+        return self._integrate_field_over_phi_theta(field, frequency, method)
+
+    def _convert_power_field_to_dB(self, field):
+        """
+        Converts a real unit power field to dB in place
+
+        :param field: power field
+        :type field: str
+        """
+        self.data_array.loc[dict(field=field)] = math_funcs.power_2_db(self.data_array.loc[dict(field=field)])
+
+    def _convert_voltage_field_to_dB(self, field):
+        """
+        Converts a real unit voltage field to dB in place
+
+        :param field: voltage field
+        :type field: str
+        """
+        self.data_array.loc[dict(field=field)] = math_funcs.voltage_2_db(self.data_array.loc[dict(field=field)])
+
+    def _convert_amperage_field_to_dB(self, field):
+        """
+        Converts a real unit amperage field to dB in place
+
+        :param field: amperage field
+        :type field: str
+        """
+        self.data_array.loc[dict(field=field)] = math_funcs.amperage_2_db(self.data_array.loc[dict(field=field)])
+
+    def _compute_directivity_at_f(self, field, frequency, directivity_field_name, method='simpson'):
+        """
+        Computes directivity given a power field
+
+        Sources:
+            [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
+
+        :param field: power field
+        :type field: str
+        :param frequency: frequency at which to calculate the directivity
+        :type frequency: number
+        :param directivity_field_name: name of the directivity field
+        :type directivity_field_name: str
+        :param method: method to use for integration, defaults to 'simpson'
+        :type method: str, optional
+        """
+
+        total_power = self._integrate_field_over_phi_theta(field, frequency, method)
+        temp = self[field, frequency] * 4 * np.pi / total_power
+        temp.data_array.coords['field'] = [directivity_field_name]
+        temp._convert_power_field_to_dB(directivity_field_name)
+        self._concat_in_place(temp, 'field')        
+
+    def _compute_directivity(self, field, directivity_field_name, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
+        first = True
+        for f in self.data_array.coords['frequency'].values:
+            if first:
+                slice = self[field, f]    
+                slice._compute_directivity_at_f(field, f, directivity_field_name)
+                first = False
+            else:
+                slice_2 = self[field, f]
+                slice_2._compute_directivity_at_f(field, f, directivity_field_name)
+                slice._concat_in_place(slice_2, 'frequency')
+        self._concat_in_place(slice[directivity_field_name], 'field')
+
+    def compute_directivity_phi(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
+        self._compute_directivity('Uphi', 'Directivity_Phi', method)
+
+    def compute_directivity_theta(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
+        self._compute_directivity('Utheta', 'Directivity_Theta', method)
+
+    def compute_directivity_LHCP(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
+        self._compute_directivity('ULHCP', 'Directivity_LHCP', method)
+
+    def compute_directivity_RHCP(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
+        self._compute_directivity('URHCP', 'Directivity_RHCP', method)
+
+    def compute_directivity_L3X(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
+        self._compute_directivity('UL3X', 'Directivity_L3X', method)
+
+    def compute_directivity_L3Y(self, method='simpson'):
+        """
+        See _compute_directivity_at_f
+        """
+        self._compute_directivity('UL3Y', 'Directivity_L3Y', method)
+
+    def _compute_gain(self, directivity_field, gain_field, radiation_efficiency):
+        """
+        Computes gain from the directivity, and radiation efficiency in place
+
+        Sources:
+            [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
+
+        :param directivity_field: Field's directivity
+        :type directivity_field: str
+        :param gain_field: Name of the realized gain field
+        :type gain_field: str
+        :param radiation_efficiency: Value of the radiation efficiency (i.e. 0.69)
+        :type radiation_efficiency: number
+        """
+        temp = self[directivity_field] + math_funcs.power_2_db(radiation_efficiency)
+        temp.data_array.coords['field'] = [gain_field]
+        self._concat_in_place(temp, 'field')
+
+    def compute_gain_phi(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_Phi', 'Gain_Phi', radiation_efficiency)
+
+    def compute_gain_theta(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_Theta', 'Gain_Theta', radiation_efficiency)
+
+    def compute_gain_LHCP(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_LHCP', 'Gain_LHCP', radiation_efficiency)
+
+    def compute_gain_RHCP(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_RHCP', 'Gain_RHCP', radiation_efficiency)
+
+    def compute_gain_L3X(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_L3X', 'Gain_L3X', radiation_efficiency)
+
+    def compute_gain_L3Y(self, radiation_efficiency):
+        """
+        See _compute_gain
+        """
+        self._compute_gain('Directivity_L3Y', 'Gain_L3Y', radiation_efficiency)
+
+    def _compute_realized_gain(self, directivity_field, gain_field, mismatch_efficiency, radiation_efficiency):
+        """
+        Computes realized gain from the directivity, mismatch efficiency, and radiation efficiency
+
+        Sources:
+            [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
+
+        :param directivity_field: Field's directivity
+        :type directivity_field: str
+        :param gain_field: Name of the realized gain field
+        :type gain_field: str
+        :param mismatch_efficiency: Value of the mismatch efficiency (i.e. 0.63)
+        :type mismatch_efficiency: number
+        :param radiation_efficiency: Value of the radiation efficiency (i.e. 0.69)
+        :type radiation_efficiency: number
+        """
+        temp = self[directivity_field] + math_funcs.power_2_db(mismatch_efficiency) + math_funcs.power_2_db(radiation_efficiency)
+        temp.data_array.coords['field'] = [gain_field]
+        self._concat_in_place(temp, 'field')
+
+    def compute_realized_gain_phi(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_Phi', 'Realized_Gain_Phi', mismatch_efficiency, radiation_efficiency)
+
+    def compute_realized_gain_theta(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_Theta', 'Realized_Gain_Theta', mismatch_efficiency, radiation_efficiency)
+
+    def compute_realized_gain_LHCP(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_LHCP', 'Realized_Gain_LHCP', mismatch_efficiency, radiation_efficiency)
+
+    def compute_realized_gain_RHCP(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_RHCP', 'Realized_Gain_RHCP', mismatch_efficiency, radiation_efficiency)
+
+    def compute_realized_gain_L3X(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_L3X', 'Realized_Gain_L3X', mismatch_efficiency, radiation_efficiency)
+
+    def compute_realized_gain_L3Y(self, mismatch_efficiency, radiation_efficiency):
+        """
+        See _compute_realized_gain
+        """
+        self._compute_realized_gain('Directivity_L3Y', 'Realized_Gain_L3Y', mismatch_efficiency, radiation_efficiency)
+
+    def find_extrema(self, field):
+        """
+        This function finds the global minimum and maximum value in the theta and phi space of a field
+        These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
+            i.e. accessing pattern_object.attrs.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
+
+        :param field: field name to find the extrema in 
+        :type field: str
+
+        :return: A dictionary with keys maximum and minimum that contain the results from the find_min and find_max calls
+        :rtype: 1 D numpy array
+        """
+        max = self.find_min(field)
+        min = self.find_max(field)
+
+        return {'Max': max, 'Min': min}
+        
+    def find_min(self, field):
+        """
+        This function finds the global minimum value in the theta and phi space of a field
+        These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
+            i.e. accessing pattern_object.attrs.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
+
+        :param field: field name to find the extrema in 
+        :type field: str
+
+        :return: The minimum
+        :rtype: 1 D numpy array versus frequency 
+        """
+        minimum_versus_frequency = self.data_array.loc[dict(field=field)].min(['theta', 'phi']).value.to_numpy()
+        if field in pattern.FIELDS_WITH_UNITS_DB:
+            minimum_versus_frequency = np.real(minimum_versus_frequency)
+        attr_name = 'Min_' + field
+        setattr(self.attrs, attr_name, minimum_versus_frequency)
+
+        return minimum_versus_frequency        
+
+    def find_peak(self, field):
+        """
+        Wrapper for find_max
+        """
+        self.find_max(field)
+
+    def find_max(self, field):
+        """
+        This function finds the global maximum value in the theta and phi space of a field
+        These maximum and minimum values are then stored as attributes with the naming convention <extrema_type>_<field>
+            i.e. accessing pattern_object.attrs.Max_Directivity returns a 1 D numpy array of the maximum directivities versus frequency
+
+        :param field: field name to find the extrema in 
+        :type field: str
+
+        :return: The maximum
+        :rtype: 1 D numpy array versus frequency
+        """
+        maximum_versus_frequency = self.data_array.loc[dict(field=field)].max(['theta', 'phi']).value.to_numpy()
+        if field in pattern.FIELDS_WITH_UNITS_DB:
+            maximum_versus_frequency = np.real(maximum_versus_frequency)
+        attr_name = 'Max_' + field
+        setattr(self.attrs, attr_name, maximum_versus_frequency)
+
+        return maximum_versus_frequency
+
+    def _find_global_extrema(self, field, coord, extrema_type, **kwargs):
         """
         Finds the maximum of a data field for every coordinate. Saves data as a DataArray that is an attribute of
-        pattern.data_array with the following naming convention: <extrema_type>_<field>_vs_<coord>. Ex: Find maximum
-        Directivity_L3Y vs frequency, then the data is stored as pattern.data_array.max_Directivity_L3Y_vs_frequency.
+        pattern_object with the following naming convention: pattern_object.attrs.<extrema_type>_<field>_vs_<coord>. Ex: Find maximum
+        Directivity_L3Y vs frequency, then the data is stored as pattern_object.attrs.max_Directivity_L3Y_vs_frequency.
         
-        Coordinates for the maximum data are saved as <extrema_type>_<field>_vs_<coord>_<remaining_coord_0> and 
-        <extrema_type>_<field>_vs_<coord>_<remaining_coord_1>.
+        Coordinates for the maximum data are saved as pattern_object.attrs.<extrema_type>_<field>_vs_<coord>_<remaining_coord_0> and 
+        pattern_object.attrs.<extrema_type>_<field>_vs_<coord>_<remaining_coord_1>.
         
         All data is saved as a numpy array, which goes along the 'coord' argument.
 
@@ -562,6 +1165,7 @@ class pattern():
         :param **save_name: string to save the name of the calculation as something other than
         '<extrema_type>_<field>_vs_<coord>'
         :type **save_name: string
+        
         """
 
         # generate save name
@@ -592,23 +1196,23 @@ class pattern():
         # find maximum or minimum vs coord
         arg = None
         if extrema_type == 'max':
-            self.data_array.attrs[save_name] = self.data_array.loc[field].max(remaining_coords).to_numpy()
-            arg = self.data_array.loc[field].argmax(remaining_coords)
+            setattr(self.attrs, save_name, self.data_array.loc[dict(field=field)].max(remaining_coords).value.to_numpy())
+            arg = self.data_array.loc[dict(field=field)].argmax(remaining_coords)
         elif extrema_type == 'min':
-            self.data_array.attrs[save_name] = self.data_array.loc[field].min(remaining_coords).to_numpy()
-            arg = self.data_array.loc[field].argmin(remaining_coords)
-        self.data_array.attrs[save_name + '_' + remaining_coords[0]] = self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy()
-        self.data_array.attrs[save_name + '_' + remaining_coords[1]] = self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy()
+            setattr(self.attrs, save_name, self.data_array.loc[dict(field=field)].min(remaining_coords).value.to_numpy())
+            arg = self.data_array.loc[dict(field=field)].argmin(remaining_coords)
+        setattr(self.attrs, save_name + '_' + remaining_coords[0], self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy())
+        setattr(self.attrs, save_name + '_' + remaining_coords[1], self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy())
 
-    def calc_aperture_efficiency(self, pattern_type, area, **kwargs):
+    def compute_aperture_efficiency(self, field, area, **kwargs):
         """
-        Computes aperture efficiency for the antenna given an aperture area. Sets
-        data_array.attrs.'aperture_efficiency_<pattern_type>' to a numpy array containing aperture efficiency vs
-        data_array.frequency (%) and  _data_array.attrs.'aperture_area' to float from argument area (m)
+        Computes aperture efficiency given a gain or directivity field and the aperture area. 
+        Stores the result versus frequency as 1 D numpy array 
+        in the object field with the format pattern_object.attrs.Aperture_Efficiency_<field>.
 
-        :param pattern_type: type of pattern, from VALID_FIELD_NAMES, to compute aperture efficiency from... basically
+        :param field: type of pattern, from VALID_FIELD_NAMES, to compute aperture efficiency from... basically
         specifies polarization
-        :type pattern_type: str
+        :type field: str
 
         :param area: aperture area / m
         :type area: float or int
@@ -628,18 +1232,21 @@ class pattern():
         :type **aperture_normal: numpy array of length 3
 
         :param **save_name: string to save the name of the calculation as something other than 'aperture_efficiency_
-        <pattern_type>'
+        <field>'
         :type **save_name: string
         
         :param **area_arg_projected: if True, argument area is used to compute aperture efficiency regardless of where beam peak is (default False)
         :type **area_arg_projected: bool
+
+        :return: The aperture efficiency
+        :rtype: 1 D numpy array
         """
 
         # handle kwargs
         beam_peak = (0, 0)
         peak_finding = False
         aperture_normal = np.array([0, 0, 1])
-        save_name = 'aperture_efficiency_' + pattern_type
+        save_name = 'Aperture_Efficiency_' + field
         area_arg_projected = False
         for key in kwargs.keys():
             if key == 'beam_peak':
@@ -654,11 +1261,11 @@ class pattern():
                 area_arg_projected = kwargs[key]
 
         # error handling to see if field is an actual antenna pattern
-        if _check_field_in_valid_fields(pattern_type):
-            if not ('Directivity' in pattern_type or 'Gain' in pattern_type):
-                raise ValueError('pattern_type is not a radiation pattern (gain or directivity).')
+        if _check_field_in_valid_fields(field):
+            if not ('Directivity' in field or 'Gain' in field):
+                raise ValueError('field is not a radiation pattern (gain or directivity).')
         else:
-            raise ValueError('pattern_type is not in pattern.VALID_FIELD_NAMES.')
+            raise ValueError('field is not in pattern.VALID_FIELD_NAMES.')
 
         # aperture efficiency function
         def ap_eff(pat_value, area_arg):
@@ -673,7 +1280,7 @@ class pattern():
             :return: aperture efficiency / %
             :rtype: 1D numpy array
             """
-            return math_funcs.db_2_mag(pat_value) / \
+            return math_funcs.db_2_power(pat_value) / \
                    (4 * np.pi * area_arg / (electromagnetics.wavelength(self.data_array.frequency.values) ** 2)) * 100
 
         # compute aperture efficiency using peak finding or NOT using peak finding
@@ -688,33 +1295,39 @@ class pattern():
             else:
                 projected_area = area * np.cos(np.deg2rad(beam_peak[0]))
         elif peak_finding: 
-            self.find_global_extrema(pattern_type, 'frequency', 'max')                              # find beam peak location
-            peak_theta_angle_name = 'max_' + pattern_type + '_vs_frequency_theta'                   # name of peak theta angle data
-            peak_phi_angle_name = 'max_' + pattern_type + '_vs_frequency_phi'                       # name of peak phi angle data
-            peak_angle_theta = self.data_array.attrs[peak_theta_angle_name]                         # get beam peak location in theta
-            peak_angle_phi = self.data_array.attrs[peak_phi_angle_name]                             # get beam peak location in phi
+            self._find_global_extrema(field, 'frequency', 'max')                              # find beam peak location
+            peak_theta_angle_name = 'max_' + field + '_vs_frequency_theta'                   # name of peak theta angle data
+            peak_phi_angle_name = 'max_' + field + '_vs_frequency_phi'                       # name of peak phi angle data
+            peak_angle_theta = getattr(self.attrs, peak_theta_angle_name)                        # get beam peak location in theta
+            peak_angle_phi = getattr(self.attrs, peak_phi_angle_name)                             # get beam peak location in phi
             if area_arg_projected:
                 projected_area = area
             else:
                 projected_area = area * np.cos(np.deg2rad(peak_angle_theta))
-        peak_pattern = self.data_array.loc[pattern_type, :, peak_angle_theta, peak_angle_phi].values
+        peak_pattern = self.data_array.loc[field, :, peak_angle_theta, peak_angle_phi].values
         result = ap_eff(peak_pattern, projected_area).flatten()                                     # compute aperture efficiency
-        self.data_array.attrs[save_name] = result                                                   # store aperture efficiency
-        self.data_array.attrs['aperture_area'] = area                                               # store aperture area
-        self.data_array.attrs['aperture_projected_area'] = projected_area                           # store projected area
-
-    # TODO implement calc_phase_center
-    def calc_phase_center(self):
-        pass
         
-    def find_beamwidth(self, pattern_type, bw_setting, plane, **kwargs):
+        # store apperture efficiency
+        setattr(self.attrs, save_name, result)
+        # store apperture area
+        setattr(self.attrs, 'Aperture_Area', area)
+        # store projected area
+        setattr(self.attrs, 'Aperture_Projected_Area', projected_area)
+
+        return result
+
+    # # TODO implement calc_phase_center
+    # def calc_phase_center(self):
+    #     pass
+        
+    def find_beamwidth(self, field, bw_setting, plane, **kwargs):
         """
         Computes some amplitude beamwidth (ex: -3 dB BW) of an antenna pattern in a specific plane. Computed at each frequency
-        Result is stored as an attribute in self.data_array with the following naming convention:
-        'beamwidth_<bw_setting>dB_<pattern_type>_<param_plane[0]>_<param_plane[1]>deg'
+        Result is stored as pattern attribute with the following naming convention:
+        pattern_object.attrs.Beamwidth_<bw_setting>dB_<field>_<param_plane[0]>_<param_plane[1]>deg
         
-        :param pattern_type: pattern type to find beamwidth of... from VALID_FIELD_NAMES
-        :type pattern_type: string
+        :param field: pattern type to find beamwidth of... from VALID_FIELD_NAMES
+        :type field: string
         
         :param bw_setting: beamwidth, down from beam peak, in dB (ex: -3 dB)
         :type bw_setting: float
@@ -722,32 +1335,34 @@ class pattern():
         :param plane: tuple containing angular coordinate (theta or phi), and its value (deg) for cut that beamwidth is in
         :type plane: tuple (string, float)
         
-        :param **save_name: string to save the name of the calculation as something other than 'beamwidth_<bw_setting>_<pattern_type>_<param_plane[0]>_<param_plane[1]>deg'
+        :param **save_name: string to save the name of the calculation as something other than 'beamwidth_<bw_setting>_<field>_<param_plane[0]>_<param_plane[1]>deg'
         :type **save_name: string
 
+        :return: The beamwidth
+        :rtype: 1 D numpy array
         """
-        
+
         # handle kwargs
-        save_name = 'beamwidth_' + str(bw_setting).replace('.', 'p') + '_' + pattern_type + '_' + plane[0] + '_' + str(plane[1]).replace('.', 'p')
+        save_name = 'Beamwidth_' + str(bw_setting).replace('.', 'p') + '_' + field + '_' + plane[0] + '_' + str(plane[1]).replace('.', 'p')
         for key in kwargs:
             if key == 'save_name':
                 save_name = kwargs[key]
         
         # error handling to see if field is an actual antenna pattern
-        if _check_field_in_valid_fields(pattern_type):
-            if not ('Directivity' in pattern_type or 'Gain' in pattern_type):
-                raise ValueError('pattern_type is not a radiation pattern (gain or directivity).')
+        if _check_field_in_valid_fields(field):
+            if not ('Directivity' in field or 'Gain' in field):
+                raise ValueError('field is not a radiation pattern (gain or directivity).')
         else:
-            raise ValueError('pattern_type is not in pattern.VALID_FIELD_NAMES.')
+            raise ValueError('field is not in pattern.VALID_FIELD_NAMES.')
         
         # get data in the specified cut, error handling
         data_xr = None
         opposite_coord = None           # used for slicing data later
         if plane[0] == 'theta':
-            data_xr = self.data_array.loc[pattern_type, :, plane[1], :]
+            data_xr = self.data_array.loc[field, :, plane[1], :]
             opposite_coord = 'phi'
         elif plane[0] == 'phi':
-            data_xr = self.data_array.loc[pattern_type, :, :, plane[1]]
+            data_xr = self.data_array.loc[field, :, :, plane[1]]
             opposite_coord = 'theta'
         else: 
             raise ValueError("First element of argument 'plane' is not either 'theta' or 'phi'.")
@@ -864,8 +1479,12 @@ class pattern():
                 angle_right = (bw_amp - b_right) / m_right
                 bw_result.append(np.abs(angle_right - angle_left))
         
+        result = np.array(bw_result)
+
         # store beamwidth results
-        self.data_array.attrs[save_name] = np.array(bw_result)
+        setattr(self.attrs, save_name, result)
+
+        return result
               
     def sph_2_array_coordinates(self):
         """

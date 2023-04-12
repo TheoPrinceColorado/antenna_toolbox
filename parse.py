@@ -116,18 +116,18 @@ def _compute_pattern(re_etheta: float, im_etheta: float, re_ephi: float, im_ephi
     polarization_angle = np.rad2deg(np.pi/2 - 0.5*np.arctan2(2*exo*eyo * np.cos(delta_phi), (exo**2 - eyo**2) * np.cos(delta_phi)))
 
     # convert to dBi, return
-    return (math_funcs.mag_2_db(pat_theta),
-            math_funcs.mag_2_db(pat_phi),
-            math_funcs.mag_2_db(pat_L3X),
-            math_funcs.mag_2_db(pat_L3Y),
-            math_funcs.mag_2_db(pat_LHCP),
-            math_funcs.mag_2_db(pat_RHCP),
-            math_funcs.mag_2_db(pat_total),
-            math_funcs.mag_2_db(Xpol_YoverX),
-            math_funcs.mag_2_db(Xpol_XoverY),
-            math_funcs.mag_2_db(Xpol_LHoverRH),
-            math_funcs.mag_2_db(Xpol_RHoverLH),
-            math_funcs.mag_2_db(AR) * 2,
+    return (math_funcs.power_2_db(pat_theta),
+            math_funcs.power_2_db(pat_phi),
+            math_funcs.power_2_db(pat_L3X),
+            math_funcs.power_2_db(pat_L3Y),
+            math_funcs.power_2_db(pat_LHCP),
+            math_funcs.power_2_db(pat_RHCP),
+            math_funcs.power_2_db(pat_total),
+            math_funcs.power_2_db(Xpol_YoverX),
+            math_funcs.power_2_db(Xpol_XoverY),
+            math_funcs.power_2_db(Xpol_LHoverRH),
+            math_funcs.power_2_db(Xpol_RHoverLH),
+            math_funcs.voltage_2_db(AR),
             polarization_angle)
 
 
@@ -293,7 +293,7 @@ def from_ffe(file):
         polarization_angle = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[12])
 
         # compute IEEE gain from radiation efficiency
-        rad_eff_db = math_funcs.mag_2_db(rad_efficiency[ii])
+        rad_eff_db = math_funcs.power_2_db(rad_efficiency[ii])
         g_theta = d_theta + rad_eff_db
         g_phi = d_phi + rad_eff_db
         g_L3X = d_L3X + rad_eff_db
@@ -540,8 +540,8 @@ def from_ffs(file):
         # compute gains from efficiencies if efficiencies are present (ie CST simulation uses ports, not a field source)
         if np.max(p_s) > 0:
             # compute gains
-            rad_eff_db = math_funcs.mag_2_db(rad_efficiency[ii])  # convert efficiencies to dB
-            total_eff_db = math_funcs.mag_2_db(total_efficiency[ii])
+            rad_eff_db = math_funcs.power_2_db(rad_efficiency[ii])  # convert efficiencies to dB
+            total_eff_db = math_funcs.power_2_db(total_efficiency[ii])
             g_theta = d_theta + rad_eff_db  # IEEE Gain
             g_phi = d_phi + rad_eff_db
             g_L3X = d_L3X + rad_eff_db
@@ -810,6 +810,46 @@ def read_csv(file_name, data_dict, coord_dict=['field', 'frequency', 'theta', 'p
     field_names = data_dict.keys()
 
     field_names = list(data_dict.values())
+    other_coord_names = list(coord_dict.values())
+
+    df = df[field_names + other_coord_names].copy()
+    df = df.melt(id_vars=other_coord_names, value_vars=field_names, var_name='field')
+
+    df = df.set_index(['field'] + other_coord_names)
+
+    data_array = df.to_xarray()
+
+    return core.pattern(data_array=data_array)
+
+def read_arg_chamber_pattern_data(file_name, linear_or_circular=True):
+    """
+    Loads arg chamber data
+
+    :param file_name: file name of the csv output file from the arg chamber
+    :type file_name: str
+    :param linear_or_circular: if true the arg chamber data is linear (Etheta and Ephi) 
+        otherwise the data is loaded assuming (Etheta=ERHCP and Ephi=ELHCP), defaults to True
+    :type linear_or_circular: bool, optional
+    :return: Pattern object with the arg chamber data in it
+    :rtype: antenna_toolbox.pattern
+    """
+
+    coord_dict = {'#':'frequency', 'Phi': 'phi', 'Theta':'theta',}
+
+    df = pd.read_csv(file_name, sep='\s+')
+
+    df = df.rename(coord_dict, axis='columns')
+
+    if linear_or_circular: # in the case linear is set
+        df['Etheta'] = 10**(df['dB(Etheta)'] / 20) * np.e**(1j*np.pi*df['Phase(Etheta)']/180)
+        df['Ephi'] = 10**(df['dB(Ephi)'] / 20) * np.e**(1j*np.pi*df['Phase(Ephi)']/180)
+
+        field_names = ['Etheta', 'Ephi']
+    else: # in the case circular is set
+        df['ERHCP'] = 10**(df['dB(Etheta)'] / 20) * np.e**(1j*np.pi*df['Phase(Etheta)']/180)
+        df['ELHCP'] = 10**(df['dB(Ephi)'] / 20) * np.e**(1j*np.pi*df['Phase(Ephi)']/180)
+    
+        field_names = ['ERHCP', 'ELHCP']
     other_coord_names = list(coord_dict.values())
 
     df = df[field_names + other_coord_names].copy()
