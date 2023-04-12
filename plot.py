@@ -125,7 +125,7 @@ def rect_phi_cut(pattern_object, field_names, frequency, phi, field_labels=None)
     units = set()
     for i, field in enumerate(field_names):
         data_array_cut = data_array.sel(field=field, frequency=frequency, phi=phi)
-        theta = data_array_cut.coords['theta'].values
+        theta = data_array_cut.coords['theta'].values*np.pi/180
         data =  data_array_cut.value
 
         if field_labels is None:
@@ -175,6 +175,6 @@ def rect_theta_cut(pattern_object, field_names, frequency, theta, field_labels=N
 
     if len(units) == 1:
         plt.ylabel(list(units)[0])
-    plt.xlabel(pattern_object.DEFAULT_UNITS['Theta'])
+    plt.xlabel(pattern_object.DEFAULT_UNITS['Phi'])
     plt.legend()
     plt.tight_layout()
