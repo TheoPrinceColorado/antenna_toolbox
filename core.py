@@ -385,7 +385,7 @@ class pattern():
         # self._do_pattern_objects_contain_the_same_fields(other)
 
     def is_empty(self):
-        return self.data_array.size == 0
+        return self.data_array.value.size == 0
 
     def __add__(self, other):
         """
@@ -454,7 +454,7 @@ class pattern():
         if isinstance(key, str):
             field = [key]
             return pattern(data_array=self.data_array.loc[dict(field=field)])
-        elif isinstance(key, slice):
+        elif isinstance(key, slice) or isinstance(key, list):
             field = key
             return pattern(data_array=self.data_array.loc[dict(field=field)])
         elif not isinstance(key, list) and not isinstance(key, tuple):
@@ -514,7 +514,7 @@ class pattern():
         if isinstance(key, str):
             field = [key]
             self.data_array.loc[dict(field=field)] = value.data_array
-        elif isinstance(key, slice):
+        elif isinstance(key, slice) or isinstance(key, list):
             field = key
             self.data_array.loc[dict(field=field)] = value.data_array
         elif not isinstance(key, list) and not isinstance(key, tuple):
@@ -574,7 +574,7 @@ class pattern():
         :return: all field data across all dimensions as one numpy array
         :rtype: numpy array
         """
-        return self.data_array.values
+        return self.data_array.value.to_numpy()
 
     def to_dataframe(self):
         """Returns the pattern object as a multindex dataframe
