@@ -5,4 +5,4 @@ temp/*
 temp\*
 dist\*
 dist/*
-*.egg-info
+*.egg-info*
