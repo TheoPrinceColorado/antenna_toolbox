@@ -5,7 +5,7 @@ antenna_toolbox - a box of antenna analysis, plotting and calculation tools
 
 from antenna_toolbox.core import pattern
 import antenna_toolbox.antennas
-import antenna_toolbox.array_control
+#import antenna_toolbox.array_control # need to add __init__.py to this directory
 import antenna_toolbox.array_plot
 from antenna_toolbox import electromagnetics
 from antenna_toolbox import grids
