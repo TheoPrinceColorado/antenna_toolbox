@@ -891,15 +891,17 @@ class pattern():
         """
         self.data_array.loc[dict(field=field)] = math_funcs.amperage_2_db(self.data_array.loc[dict(field=field)])
 
-    def _compute_directivity_at_f(self, field, frequency, directivity_field_name, method='simpson'):
+    def _compute_directivity_at_f(self, field_dir_pol, field_orth_pol, frequency, directivity_field_name, method='simpson'):
         """
         Computes directivity given a power field
 
         Sources:
             [1] C. A. Balanis, Antenna Theory: Analysis and Design. Hoboken, NJ, USA: Wiley, 2016. Ch. 2
 
-        :param field: power field
-        :type field: str
+        :param field_dir_pol: power field
+        :type field_dir_pol: str
+        :param field_orth_pol: orthogonal polarization power field
+        :type field_orth_pol: str
         :param frequency: frequency at which to calculate the directivity
         :type frequency: number
         :param directivity_field_name: name of the directivity field
@@ -908,25 +910,26 @@ class pattern():
         :type method: str, optional
         """
 
-        total_power = self._integrate_field_over_phi_theta(field, frequency, method)
-        temp = self[field, frequency] * 4 * np.pi / total_power
+        radiated_power = self._integrate_field_over_phi_theta(field_dir_pol, frequency, method) \
+            + self._integrate_field_over_phi_theta(field_orth_pol, frequency, method)
+        temp = self[field_dir_pol, frequency] * 4 * np.pi / radiated_power
         temp.data_array.coords['field'] = [directivity_field_name]
         temp._convert_power_field_to_dB(directivity_field_name)
         self._concat_in_place(temp, 'field')        
 
-    def _compute_directivity(self, field, directivity_field_name, method='simpson'):
+    def _compute_directivity(self,  field_dir_pol, field_orth_pol, directivity_field_name, method='simpson'):
         """
         See _compute_directivity_at_f
         """
         first = True
         for f in self.data_array.coords['frequency'].values:
             if first:
-                slice = self[field, f]    
-                slice._compute_directivity_at_f(field, f, directivity_field_name)
+                slice = self[[field_dir_pol, field_orth_pol], f]    
+                slice._compute_directivity_at_f(field_dir_pol, field_orth_pol, f, directivity_field_name)
                 first = False
             else:
-                slice_2 = self[field, f]
-                slice_2._compute_directivity_at_f(field, f, directivity_field_name)
+                slice_2 = self[[field_dir_pol, field_orth_pol], f]
+                slice_2._compute_directivity_at_f(field_dir_pol, field_orth_pol, f, directivity_field_name)
                 slice._concat_in_place(slice_2, 'frequency')
         self._concat_in_place(slice[directivity_field_name], 'field')
 
@@ -934,37 +937,37 @@ class pattern():
         """
         See _compute_directivity_at_f
         """
-        self._compute_directivity('Uphi', 'Directivity_Phi', method)
+        self._compute_directivity('Uphi', 'Utheta', 'Directivity_Phi', method)
 
     def compute_directivity_theta(self, method='simpson'):
         """
         See _compute_directivity_at_f
         """
-        self._compute_directivity('Utheta', 'Directivity_Theta', method)
+        self._compute_directivity('Utheta', 'Uphi', 'Directivity_Theta', method)
 
     def compute_directivity_LHCP(self, method='simpson'):
         """
         See _compute_directivity_at_f
         """
-        self._compute_directivity('ULHCP', 'Directivity_LHCP', method)
+        self._compute_directivity('ULHCP', 'URHCP', 'Directivity_LHCP', method)
 
     def compute_directivity_RHCP(self, method='simpson'):
         """
         See _compute_directivity_at_f
         """
-        self._compute_directivity('URHCP', 'Directivity_RHCP', method)
+        self._compute_directivity('URHCP', 'ULHCP', 'Directivity_RHCP', method)
 
     def compute_directivity_L3X(self, method='simpson'):
         """
         See _compute_directivity_at_f
         """
-        self._compute_directivity('UL3X', 'Directivity_L3X', method)
+        self._compute_directivity('UL3X', 'UL3Y', 'Directivity_L3X', method)
 
     def compute_directivity_L3Y(self, method='simpson'):
         """
         See _compute_directivity_at_f
         """
-        self._compute_directivity('UL3Y', 'Directivity_L3Y', method)
+        self._compute_directivity('UL3Y', 'UL3X', 'Directivity_L3Y', method)
 
     def _compute_gain(self, directivity_field, gain_field, radiation_efficiency):
         """
