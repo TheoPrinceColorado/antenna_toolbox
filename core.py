@@ -7,7 +7,6 @@ import copy
 from os.path import splitext
 from antenna_toolbox import electromagnetics
 from antenna_toolbox import math_funcs
-from antenna_toolbox import parse
 from antenna_toolbox import constants
 
 def _get_keys_whose_values_contain_string(dictionary, search_string):
@@ -1538,40 +1537,4 @@ def _check_field_in_valid_fields(field_name):
 
 def supported_file_types():
     return pattern.SUPPORTED_FILE_TYPES
-
-
-def from_file(file_name, save=False):
-    """
-    Creates a pattern object from data found in a file. File must be in the format
-    of pattern.SUPPORTED_FILE_TYPES.
-
-    :param file_name: name of file to load
-    :type file_name: str
-
-    :param save: save pattern.data_array as netcdf (.nc) if True (default False)
-    :type save: bool
-
-    :return: pattern object, constructed from data in file
-    """
-    # grab extension
-    root, ext = splitext(file_name)
-
-    # warnings
-    if ext not in supported_file_types():
-        warnings.warn('File type not supported for parsing. Returning None.', UserWarning)
-    
-    # parse
-    pat = None
-    if ext == '.ffs':
-        pat = parse.from_ffs(file_name)
-    elif ext == '.ffe':
-        pat = parse.from_ffe(file_name)
-    elif ext == '.nc':
-        pat = parse.from_netcdf(file_name)
-
-    # save if requested
-    if save == True:
-        pat.data_array.to_netcdf(root + '.nc')
-
-    return pat
     
