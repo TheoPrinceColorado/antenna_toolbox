@@ -5,7 +5,8 @@ import warnings
 import xarray as xr
 from antenna_toolbox import math_funcs
 from antenna_toolbox import electromagnetics
-from antenna_toolbox import core
+# from antenna_toolbox import core
+from antenna_toolbox.core import pattern
 
 
 def _read_in_file(file):
@@ -349,22 +350,16 @@ def from_ffs(file):
     """
     Parses a .ffs file from CST Microwave Studio high frequency simulation. Populates a pattern object with its data.
 
-    :param file: .ffs file to be parsed WITH path / string
+    :param file: .ffs file to be parsed / string
     :return: pattern object with said data
-    """
+    """    
 
-    # Error handling for file type
-    file_name_split = file.split('.')
-    if file_name_split[-1] != 'ffs':
-        raise TypeError('File ' + file + ' is not a .ffs file and cannot be parsed with from_ffs().')
-
-    # load file into RAM
-    lines = []
-    for line in open(file, 'r'):
-        lines.append(line)
-
-    # remove newline characters from line
-    lines = [line.replace('\n', '') for line in lines]
+    # load file into RAM and create a list of lines...
+    # this method was 2x faster than line by line for loop when I tested with a  
+    # 600 MB file
+    with open(file, 'r') as file:
+        lines = file.read()
+    lines = lines.split('\n')
 
     # grab metadata
     version_number = float(lines[3])  # file version number
@@ -381,7 +376,7 @@ def from_ffs(file):
     supported_version_numbers = [3.0]
     if version_number not in supported_version_numbers:
         warnings.warn('Version ' + str(version_number) + ' of .ffs files is not currently supported by the parser.' +
-                      ' Output may be erroneous.', UserWarning)
+                        ' Output may be erroneous.', UserWarning)
 
     # parse frequency/power data
     p_r = np.empty(number_frequencies)  # power radiated / W
@@ -404,81 +399,11 @@ def from_ffs(file):
     theta = np.linspace(0, 180, theta_samples)
     number_angles = theta_samples * phi_samples  # total number of simulated angles in the file
 
-    # compute efficiencies if power stimulated is NOT zero...
-    # ...meaning the CST simulation uses a port instead of a field source
-    # ... also initialize pattern object with correct fields (with gains or without gains) if gains can be computed
-    rad_efficiency = None
-    total_efficiency = None
-    export_pattern = None
-    if np.max(p_s) > 0:
+    # create blank arrays for field data
+    e_theta = np.zeros((number_frequencies, theta_samples, phi_samples), dtype=np.cdouble)
+    e_phi = np.zeros((number_frequencies, theta_samples, phi_samples), dtype=np.cdouble)
 
-        # compute efficiencies
-        total_efficiency = p_r / p_s
-        rad_efficiency = p_r / p_a
-
-        # initialize pattern object with GAINZZZZZZZ BRUUUUUUUHHHHHHHH (GET BIIIIIIIIIIIG)
-        export_pattern = core.pattern(Re_Etheta=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Im_Etheta=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Re_Ephi=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Im_Ephi=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_Theta=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_Phi=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_Total=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_L3X=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_L3Y=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_LHCP=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_RHCP=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Gain_Theta=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Gain_Phi=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Gain_Total=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Gain_L3X=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Gain_L3Y=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Gain_LHCP=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Gain_RHCP=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Realized_Gain_Theta=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Realized_Gain_Phi=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Realized_Gain_Total=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Realized_Gain_L3X=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Realized_Gain_L3Y=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Realized_Gain_LHCP=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Realized_Gain_RHCP=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Xpol_Ratio_Y_to_X=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Xpol_Ratio_X_to_Y=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Xpol_Ratio_LH_to_RH=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Xpol_Ratio_RH_to_LH=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Axial_Ratio=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Polarization_Angle=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     frequency=freqs,
-                                     theta=theta,
-                                     phi=phi
-                                     )
-
-
-    else:
-        # initialize pattern object
-        export_pattern = core.pattern(Re_Etheta=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Im_Etheta=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Re_Ephi=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Im_Ephi=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_Theta=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_Phi=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_Total=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_L3X=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_L3Y=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_LHCP=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Directivity_RHCP=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Xpol_Ratio_Y_to_X=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Xpol_Ratio_X_to_Y=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Xpol_Ratio_LH_to_RH=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Xpol_Ratio_RH_to_LH=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Axial_Ratio=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     Polarization_Angle=np.empty((number_frequencies, theta_samples, phi_samples)),
-                                     frequency=freqs,
-                                     theta=theta,
-                                     phi=phi
-                                     )
-
-    # parse field data
+    # loop through each field block (this is for each frequency), store data
     begin_field_line = None
     end_field_line = None
     for ii in range(0, number_frequencies):
@@ -488,110 +413,49 @@ def from_ffs(file):
             begin_field_line = power_freq_header_line_number + 1 * number_frequencies * 5 + 6
         end_field_line = begin_field_line + number_angles - 1
 
-        # grab fields, convert to number array...
+        # grab fields, convert to numpy array... for loop appears 2x faster than list comprehension
         # Columns of array... 0: phi, 1: theta, 2: Re(E_Theta), 3: Im(E_Theta), 4: Re(E_Phi), 5: Im(E_Phi)
-        field_lines = lines[begin_field_line:end_field_line + 1]  # grab lines with data... n_points x 1 array
-        field_lines = [line.split() for line in field_lines]  # split lines by spaces... n_points x 6 array
-        fields = np.array(field_lines).astype(float)
+        fields = np.zeros((number_angles, 6), dtype=float)
+        for jj in range(number_angles):
+            fields[jj, :] = lines[begin_field_line + jj].split()
 
-        # compute fields, directivities, xpol ratios, axial ratio, and polarization angle
-        # (2D arrays where theta is on rows, phi on columns, datapoints are patterns)
-        theta_row, theta_row_pos = np.unique(fields[:, 1], return_inverse=True)
-        phi_col, phi_col_pos = np.unique(fields[:, 0], return_inverse=True)
-        d_tuple = _compute_pattern(fields[:, 2], fields[:, 3], fields[:, 4], fields[:, 5], p_r[ii], fields[:, 0])
-        e_theta_re = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, fields[:, 2])
-        e_theta_im = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, fields[:, 3])
-        e_phi_re = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, fields[:, 4])
-        e_phi_im = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, fields[:, 5])
-        d_theta = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[0])
-        d_phi = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[1])
-        d_L3X = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[2])
-        d_L3Y = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[3])
-        d_LHCP = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[4])
-        d_RHCP = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[5])
-        d_total = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[6])
-        xpol_YoverX = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[7])
-        xpol_XoverY = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[8])
-        xpol_LHoverRH = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[9])
-        xpol_RHoverLH = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[10])
-        AR = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[11])
-        polarization_angle = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, d_tuple[12])
+        # get arguments for pivoting numpy arrays
+        if ii == 0:
+            theta_row, theta_row_pos = np.unique(fields[:, 1], return_inverse=True)
+            phi_col, phi_col_pos = np.unique(fields[:, 0], return_inverse=True)
 
-        # save directivities and other quantities in field object
-        export_pattern.data_array.loc['Re_Etheta'][ii, :, :] = e_theta_re
-        export_pattern.data_array.loc['Im_Etheta'][ii, :, :] = e_theta_im
-        export_pattern.data_array.loc['Re_Ephi'][ii, :, :] = e_phi_re
-        export_pattern.data_array.loc['Im_Ephi'][ii, :, :] = e_phi_im
-        export_pattern.data_array.loc['Directivity_Theta'][ii, :, :] = d_theta
-        export_pattern.data_array.loc['Directivity_Theta'][ii, :, :] = d_theta
-        export_pattern.data_array.loc['Directivity_Phi'][ii, :, :] = d_phi
-        export_pattern.data_array.loc['Directivity_L3X'][ii, :, :] = d_L3X
-        export_pattern.data_array.loc['Directivity_L3Y'][ii, :, :] = d_L3Y
-        export_pattern.data_array.loc['Directivity_LHCP'][ii, :, :] = d_LHCP
-        export_pattern.data_array.loc['Directivity_RHCP'][ii, :, :] = d_RHCP
-        export_pattern.data_array.loc['Directivity_Total'][ii, :, :] = d_total
-        export_pattern.data_array.loc['Xpol_Ratio_Y_to_X'][ii, :, :] = xpol_YoverX
-        export_pattern.data_array.loc['Xpol_Ratio_X_to_Y'][ii, :, :] = xpol_XoverY
-        export_pattern.data_array.loc['Xpol_Ratio_LH_to_RH'][ii, :, :] = xpol_LHoverRH
-        export_pattern.data_array.loc['Xpol_Ratio_RH_to_LH'][ii, :, :] = xpol_RHoverLH
-        export_pattern.data_array.loc['Axial_Ratio'][ii, :, :] = AR
-        export_pattern.data_array.loc['Polarization_Angle'][ii, :, :] = polarization_angle
-
-        # compute gains from efficiencies if efficiencies are present (ie CST simulation uses ports, not a field source)
-        if np.max(p_s) > 0:
-            # compute gains
-            rad_eff_db = math_funcs.power_2_db(rad_efficiency[ii])  # convert efficiencies to dB
-            total_eff_db = math_funcs.power_2_db(total_efficiency[ii])
-            g_theta = d_theta + rad_eff_db  # IEEE Gain
-            g_phi = d_phi + rad_eff_db
-            g_L3X = d_L3X + rad_eff_db
-            g_L3Y = d_L3Y + rad_eff_db
-            g_LHCP = d_LHCP + rad_eff_db
-            g_RHCP = d_RHCP + rad_eff_db
-            g_total = d_total + rad_eff_db
-            gr_theta = d_theta + total_eff_db  # Realized Gain
-            gr_phi = d_phi + total_eff_db
-            gr_L3X = d_L3X + total_eff_db
-            gr_L3Y = d_L3Y + total_eff_db
-            gr_LHCP = d_LHCP + total_eff_db
-            gr_RHCP = d_RHCP + total_eff_db
-            gr_total = d_total + total_eff_db
-
-            # save in pattern object
-            export_pattern.data_array.loc['Gain_Theta'][ii, :, :] = g_theta
-            export_pattern.data_array.loc['Gain_Phi'][ii, :, :] = g_phi
-            export_pattern.data_array.loc['Gain_L3X'][ii, :, :] = g_L3X
-            export_pattern.data_array.loc['Gain_L3Y'][ii, :, :] = g_L3Y
-            export_pattern.data_array.loc['Gain_LHCP'][ii, :, :] = g_LHCP
-            export_pattern.data_array.loc['Gain_RHCP'][ii, :, :] = g_RHCP
-            export_pattern.data_array.loc['Gain_Total'][ii, :, :] = g_total
-            export_pattern.data_array.loc['Realized_Gain_Theta'][ii, :, :] = gr_theta
-            export_pattern.data_array.loc['Realized_Gain_Phi'][ii, :, :] = gr_phi
-            export_pattern.data_array.loc['Realized_Gain_L3X'][ii, :, :] = gr_L3X
-            export_pattern.data_array.loc['Realized_Gain_L3Y'][ii, :, :] = gr_L3Y
-            export_pattern.data_array.loc['Realized_Gain_LHCP'][ii, :, :] = gr_LHCP
-            export_pattern.data_array.loc['Realized_Gain_RHCP'][ii, :, :] = gr_RHCP
-            export_pattern.data_array.loc['Realized_Gain_Total'][ii, :, :] = gr_total
-
-        # update beginning of field line for next block
+        # store fields
+        e_theta[ii, :, :] = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, fields[:, 2]) +  1j * _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, fields[:, 3])
+        e_phi[ii, :, :] = _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, fields[:, 4]) + 1j * _pivot_np(theta_row_pos, phi_col_pos, theta_samples, phi_samples, fields[:, 5])
+        
+        # increment
         begin_field_line = end_field_line + 6
 
-    # save metadata to pattern object
-    export_pattern.data_array.attrs['file'] = file
-    export_pattern.data_array.attrs['file_version_number'] = version_number
-    export_pattern.data_array.attrs['simulation_software'] = 'CST'
-    export_pattern.data_array.attrs['reference_position'] = position
-    export_pattern.data_array.attrs['z_axis'] = z_axis
-    export_pattern.data_array.attrs['x-axis'] = x_axis
-    export_pattern.data_array.attrs['power_radiated'] = p_r
-    if np.max(p_a) > 0:                 # store accepted power of simulation domain if it is present
-        export_pattern.data_array.attrs['power_accepted'] = p_a            # Ex: PW with no port excitation
-    if np.max(p_s) > 0:                 # store efficiencies and stimulated power if present
-        export_pattern.data_array.attrs['power_stimulated'] = p_s
-        export_pattern.data_array.attrs['radiation_efficiency'] = rad_efficiency * 100         # percent
-        export_pattern.data_array.attrs['total_efficiency'] = total_efficiency * 100           # percent
+    # create pattern object
+    data = np.stack((e_theta, e_phi), axis=0)
+    coords = {'field': ['Etheta', 'Ephi'],
+            'frequency': freqs,
+            'theta': theta,
+            'phi': phi}
+    pat = pattern(data=data,
+                coords=coords)
 
-    return export_pattern
+    # store metadata
+    pat.file = file
+    pat.file_version_number = version_number
+    pat.simulation_software = 'CST'
+    pat.reference_position = position
+    pat.z_axis = z_axis
+    pat.x_axis = x_axis
+    pat.power_radiated = p_r
+    pat.power_accepted = p_a
+    pat.power_stimulated = p_s
+    pat.radiation_efficiency = p_r / p_a
+    if np.max(p_s) > 0:
+        pat.mismatch_efficiency = p_a / p_s
+        pat.total_efficiency = p_r / p_s
+
+    return pat
 
 
 # TODO update docstring with file format 
@@ -860,3 +724,38 @@ def read_arg_chamber_pattern_data(file_name, linear_or_circular=True):
     data_array = df.to_xarray()
 
     return core.pattern(data_array=data_array)
+
+# def from_file(file_name, save=False):
+#     """
+#     Creates a pattern object from data found in a file. File must be in the format
+#     of pattern.SUPPORTED_FILE_TYPES.
+
+#     :param file_name: name of file to load
+#     :type file_name: str
+
+#     :param save: save pattern.data_array as netcdf (.nc) if True (default False)
+#     :type save: bool
+
+#     :return: pattern object, constructed from data in file
+#     """
+#     # grab extension
+#     root, ext = splitext(file_name)
+
+#     # warnings
+#     if ext not in supported_file_types():
+#         warnings.warn('File type not supported for parsing. Returning None.', UserWarning)
+    
+#     # parse
+#     pat = None
+#     if ext == '.ffs':
+#         pat = parse.from_ffs(file_name)
+#     elif ext == '.ffe':
+#         pat = parse.from_ffe(file_name)
+#     elif ext == '.nc':
+#         pat = parse.from_netcdf(file_name)
+
+#     # save if requested
+#     if save == True:
+#         pat.data_array.to_netcdf(root + '.nc')
+
+#     return pat
