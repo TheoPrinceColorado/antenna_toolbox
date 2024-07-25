@@ -26,7 +26,7 @@ class pattern():
         'ERHCP',
         'ELHCP',
         'EL3X',
-        'EL3Y'
+        'EL3Y',
         'Htheta',
         'Hphi',
         'HRHCP',
@@ -38,7 +38,7 @@ class pattern():
         'URHCP',
         'ULHCP',
         'UL3X',
-        'UL3Y'
+        'UL3Y',
         'Directivity_Theta',
         'Directivity_Phi',
         'Directivity_Total',
@@ -628,7 +628,7 @@ class pattern():
         :param field_name: name of the field
         :type field_name: str
         """
-        field.coords['field'] = [field_name]
+        field.coords['field'] = field_name
         self.data_array = xr.concat( [self.data_array, field], dim='field')
 
     def compute_ERHCP_from_Etheta_Ephi(self):
@@ -700,17 +700,42 @@ class pattern():
             * (np.abs(self.data_array.loc[dict(field=e_field_name)])**2)
         self._append_field(temp, u_field_name)
 
+    def _compute_U_from_H(self, u_field_name, h_field_name):
+        """
+        Computes U (power) from an E field measurement
+
+        :param u_field_name: _description_
+        :type u_field_name: xr.data_array
+        :param e_field_name: _description_
+        :type e_field_name: xr.data_array
+        """
+        temp =  (1 / (2)) \
+            * (np.abs(self.data_array.loc[dict(field=h_field_name)])**2)
+        self._append_field(temp, u_field_name)
+
     def compute_Utheta_from_Etheta(self):
         """
         Computes Utheta in place from Etheta
         """
         self._compute_U_from_E('Utheta', 'Etheta')
 
+    def compute_Utheta_from_Hphi(self):
+        """
+        Computes Utheta in place from Hphi
+        """
+        self._compute_U_from_H('Utheta', 'Hphi')
+
     def compute_Uphi_from_Ephi(self):
         """
         Computes Uphi in place from Ephi
         """
         self._compute_U_from_E('Uphi', 'Ephi')
+
+    def compute_Uphi_from_Htheta(self):
+        """
+        Computes Uphi in place from Htheta
+        """
+        self._compute_U_from_H('Uphi', 'Htheta')
 
     def compute_URHCP_from_ERHCP(self):
         """
