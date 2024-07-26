@@ -858,12 +858,13 @@ class pattern():
         :rtype: number
         """
         if method == 'simpson':
-            phi_meshgrid, theta_meshgrid = xr.broadcast(
-                self.data_array.coords['phi'], self.data_array.coords['theta'])
-            temp = self.data_array.loc[dict(field=field, frequency=frequency)] \
-                * np.sin(np.deg2rad(np.abs(theta_meshgrid.values)))
-            temp = sp.integrate.simpson(temp.to_array()[0], np.deg2rad(theta_meshgrid))
-            result = sp.integrate.simpson(temp, np.deg2rad(self.data_array.coords['phi']))
+            phi_grid, theta_grid = np.meshgrid(
+                self.data_array.coords['phi'], 
+                self.data_array.coords['theta'])
+
+            temp = self.data_array.loc[dict(field=field, frequency=frequency)] * np.sin(np.deg2rad(np.abs(theta_grid)))
+            temp = sp.integrate.simpson(temp, x=np.deg2rad(phi_grid))
+            result = sp.integrate.simpson(temp, x=np.deg2rad(self.data_array.coords['theta']))
         else:
             raise ValueError('Method must be simpson (more planned soon)')
 
@@ -1133,7 +1134,7 @@ class pattern():
         :return: The minimum
         :rtype: 1 D numpy array versus frequency 
         """
-        minimum_versus_frequency = self.data_array.loc[dict(field=field)].min(['theta', 'phi']).value.to_numpy()
+        minimum_versus_frequency = self.data_array.loc[dict(field=field)].min(['theta', 'phi']).values
         if field in pattern.FIELDS_WITH_UNITS_DB:
             minimum_versus_frequency = np.real(minimum_versus_frequency)
         attr_name = 'Min_' + field
@@ -1159,7 +1160,7 @@ class pattern():
         :return: The maximum
         :rtype: 1 D numpy array versus frequency
         """
-        maximum_versus_frequency = self.data_array.loc[dict(field=field)].max(['theta', 'phi']).value.to_numpy()
+        maximum_versus_frequency = self.data_array.loc[dict(field=field)].max(['theta', 'phi']).values
         if field in pattern.FIELDS_WITH_UNITS_DB:
             maximum_versus_frequency = np.real(maximum_versus_frequency)
         attr_name = 'Max_' + field
@@ -1224,10 +1225,10 @@ class pattern():
         # find maximum or minimum vs coord
         arg = None
         if extrema_type == 'max':
-            setattr(self.attrs, save_name, self.data_array.loc[dict(field=field)].max(remaining_coords).value.to_numpy())
+            setattr(self.attrs, save_name, self.data_array.loc[dict(field=field)].max(remaining_coords).values)
             arg = self.data_array.loc[dict(field=field)].argmax(remaining_coords)
         elif extrema_type == 'min':
-            setattr(self.attrs, save_name, self.data_array.loc[dict(field=field)].min(remaining_coords).value.to_numpy())
+            setattr(self.attrs, save_name, self.data_array.loc[dict(field=field)].min(remaining_coords).values)
             arg = self.data_array.loc[dict(field=field)].argmin(remaining_coords)
         setattr(self.attrs, save_name + '_' + remaining_coords[0], self.data_array.coords[remaining_coords[0]][arg[remaining_coords[0]].to_numpy()].to_numpy())
         setattr(self.attrs, save_name + '_' + remaining_coords[1], self.data_array.coords[remaining_coords[1]][arg[remaining_coords[1]].to_numpy()].to_numpy())
